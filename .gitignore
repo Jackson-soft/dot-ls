@@ -1,2 +1,5 @@
 build
 .cache
+.fleet
+CMakeUserPresets.json
+compile_commands.json
