@@ -1,8 +1,15 @@
 [requires]
 boost/1.83.0
 nlohmann_json/3.11.2
+tree-sitter/0.20.8
+catch2/3.4.0
+
 [generators]
 CMakeDeps
 CMakeToolchain
+
 [layout]
 cmake_layout
+
+[options]
+*:shared=False
