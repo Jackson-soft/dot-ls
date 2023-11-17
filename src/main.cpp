@@ -1,7 +1,6 @@
 #include <cstdlib>
 #include <format>
 #include <iostream>
-#include <memory_resource>
 
 // https://stackoverflow.com/questions/1598985/c-read-binary-stdin
 #ifdef _WIN32
@@ -22,7 +21,7 @@ auto main(int argc, char **argv) -> int {
 
         while (true) {
             std::cin.peek();
-            char *buffer;
+            char *buffer{nullptr};
             std::cin.readsome(buffer, 128);
 
             std::cout.write("sfsfs\n", 7);
@@ -30,5 +29,6 @@ auto main(int argc, char **argv) -> int {
             std::cout.flush();
         }
     }
+
     return EXIT_SUCCESS;
 }
