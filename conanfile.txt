@@ -1,8 +1,9 @@
 [requires]
 boost/1.84.0
 nlohmann_json/3.11.3
-tree-sitter/0.20.8
-catch2/3.5.2
+tree-sitter/0.22.1
+catch2/3.5.4
+fmt/10.2.1
 
 [generators]
 CMakeDeps
