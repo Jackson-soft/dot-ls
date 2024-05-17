@@ -1,8 +1,6 @@
 #include "server/server.hpp"
 
-#include <cstdio>
 #include <cstdlib>
-#include <fmt/core.h>
 #include <iostream>
 
 // https://stackoverflow.com/questions/1598985/c-read-binary-stdin
@@ -17,9 +15,9 @@
 #endif
 
 auto main(int argc, char **argv) -> int {
+    hesiod::server::LanguageServer server;
     if (argc > 1) {
         int port = std::stoi(argv[1]);
-        fmt::print("port is {}\n", port);
     } else {
         SET_BINARY_MODE();
 
@@ -35,6 +33,8 @@ auto main(int argc, char **argv) -> int {
             std::cout.flush();
         }
     }
+
+    server.Run();
 
     return EXIT_SUCCESS;
 }

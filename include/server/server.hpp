@@ -19,6 +19,8 @@ public:
 
     void Dispatch(std::string_view method, nlohmann::json params) {}
 
+    void Run() {}
+
 private:
     std::shared_ptr<basis::Session>                                          session_;
     std::map<std::string, std::function<std::string(nlohmann::json params)>> handler_{};  // 接口处理
