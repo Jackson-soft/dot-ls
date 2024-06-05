@@ -1,19 +1,20 @@
 #pragma once
 
-// 服务
+// 用户界面层
 
 #include "domain/entity/session.hpp"
 
 #include <map>
 #include <memory>
 #include <nlohmann/json.hpp>
-#include <string>
 
-namespace hesiod::server {
-class LanguageServer {
+namespace server {
+
+class Server {
 public:
-    LanguageServer()  = default;
-    ~LanguageServer() = default;
+    Server(std::shared_ptr<domain::entity::Session> session) : session_(session) {}
+
+    ~Server() = default;
 
     void Join() {}
 
@@ -22,7 +23,8 @@ public:
     void Run() {}
 
 private:
-    std::shared_ptr<basis::Session>                                          session_;
+    std::shared_ptr<domain::entity::Session>                                 session_;
     std::map<std::string, std::function<std::string(nlohmann::json params)>> handler_{};  // 接口处理
 };
-}  // namespace hesiod::server
+
+}  // namespace server

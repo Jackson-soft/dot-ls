@@ -1,7 +1,8 @@
+#include "domain/entity/session.hpp"
 #include "server/server.hpp"
 
 #include <cstdlib>
-#include <iostream>
+#include <memory>
 
 // https://stackoverflow.com/questions/1598985/c-read-binary-stdin
 #ifdef _WIN32
@@ -15,24 +16,9 @@
 #endif
 
 auto main(int argc, char **argv) -> int {
-    hesiod::server::LanguageServer server;
-    if (argc > 1) {
-        int port = std::stoi(argv[1]);
-    } else {
-        SET_BINARY_MODE();
+    SET_BINARY_MODE();
 
-        while (true) {
-            std::cin.peek();
-            char *buffer{nullptr};
-            std::cin.readsome(buffer, 128);
-
-            std::cout.write("sfsfs\n", 7);
-
-            auto srv = hesiod::server::LanguageServer();
-
-            std::cout.flush();
-        }
-    }
+    server::Server server(std::make_shared<domain::entity::IOSession>());
 
     server.Run();
 

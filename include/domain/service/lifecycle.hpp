@@ -1,6 +1,6 @@
 #pragma once
 
 // 生命周期相关服务
-namespace hesiod::lsp {
+namespace domain::service {
 class Lifecycle {};
-}  // namespace hesiod::lsp
+}  // namespace domain::service

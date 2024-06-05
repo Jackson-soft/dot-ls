@@ -3,7 +3,6 @@ boost/1.85.0
 nlohmann_json/3.11.3
 tree-sitter/0.22.5
 catch2/3.6.0
-fmt/10.2.1
 
 [generators]
 CMakeDeps
