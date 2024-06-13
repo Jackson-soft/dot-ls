@@ -14,7 +14,7 @@ public:
 
     virtual void Run()                          = 0;
     virtual void Send(std::string_view content) = 0;
-    virtual void Stop()                         = 0;
+    virtual void Close()                        = 0;
 };
 
 // 标准输入输出流实现
@@ -24,20 +24,23 @@ public:
 
     ~IOSession() override {}
 
-    void Run() override {
-        while (true) {
-            std::cin.peek();
-            char *buffer{nullptr};
-            std::cin.readsome(buffer, 128);
+    void Run() override {}
 
-            std::cout.write("sfsfs\n", 7);
-
-            std::cout.flush();
-        }
+    void Read() {
+        std::cin.peek();
+        char *buffer{nullptr};
+        std::cin.readsome(buffer, 128);
     }
 
-    void Send(std::string_view content) override {}
+    void Send(std::string_view content) override {
+        std::cout.write(content.data(), content.size());
+    }
 
-    void Stop() override {}
+    void Close() override {
+        std::cout.flush();
+    }
+
+private:
+    char *buffer_{};
 };
 }  // namespace domain::entity

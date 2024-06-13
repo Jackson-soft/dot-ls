@@ -4,9 +4,9 @@
 
 #include "domain/entity/session.hpp"
 
-#include <map>
 #include <memory>
 #include <nlohmann/json.hpp>
+#include <unordered_map>
 
 namespace server {
 
@@ -16,15 +16,19 @@ public:
 
     ~Server() = default;
 
-    void Join() {}
-
     void Dispatch(std::string_view method, nlohmann::json params) {}
 
-    void Run() {}
+    void Run() {
+        while (true) {}
+    }
+
+    void Close() {
+        session_->Close();
+    }
 
 private:
-    std::shared_ptr<domain::entity::Session>                                 session_;
-    std::map<std::string, std::function<std::string(nlohmann::json params)>> handler_{};  // 接口处理
+    std::shared_ptr<domain::entity::Session>                                           session_;
+    std::unordered_map<std::string, std::function<std::string(nlohmann::json params)>> handler_{};  // 接口处理
 };
 
 }  // namespace server
