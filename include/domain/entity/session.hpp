@@ -12,9 +12,9 @@ public:
 
     virtual ~Session() {}
 
-    virtual void Run()                          = 0;
-    virtual void Send(std::string_view content) = 0;
-    virtual void Close()                        = 0;
+    virtual auto Read(char *buffer, std::size_t maxSize) -> std::size_t = 0;
+    virtual void Write(std::string_view content)                        = 0;
+    virtual void Close()                                                = 0;
 };
 
 // 标准输入输出流实现
@@ -24,16 +24,14 @@ public:
 
     ~IOSession() override {}
 
-    void Run() override {}
-
-    void Read() {
+    auto Read(char *buffer, std::size_t maxSize) -> std::size_t override {
         std::cin.peek();
-        char *buffer{nullptr};
-        std::cin.readsome(buffer, 128);
+        return static_cast<std::size_t>(std::cin.readsome(buffer, maxSize));
     }
 
-    void Send(std::string_view content) override {
+    void Write(std::string_view content) override {
         std::cout.write(content.data(), content.size());
+        std::cout.flush();
     }
 
     void Close() override {

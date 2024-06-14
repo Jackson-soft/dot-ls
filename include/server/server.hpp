@@ -19,7 +19,9 @@ public:
     void Dispatch(std::string_view method, nlohmann::json params) {}
 
     void Run() {
-        while (true) {}
+        while (true) {
+            session_->Read(nullptr, 1024);
+        }
     }
 
     void Close() {
