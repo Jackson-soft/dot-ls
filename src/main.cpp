@@ -5,6 +5,7 @@
 #include <boost/program_options/parsers.hpp>
 #include <boost/program_options/variables_map.hpp>
 #include <cstdlib>
+#include <iostream>
 #include <memory>
 
 // https://stackoverflow.com/questions/1598985/c-read-binary-stdin
@@ -25,8 +26,8 @@ auto main(int argc, char **argv) -> int {
                                                            "just an option");
 
     boost::program_options::variables_map vm;
-    boost::program_options::store(parse_command_line(argc, argv, desc), vm);
-    notify(vm);
+    boost::program_options::store(boost::program_options::parse_command_line(argc, argv, desc), vm);
+    boost::program_options::notify(vm);
 
     if (vm.count("help")) {
         std::cout << desc << std::endl;
