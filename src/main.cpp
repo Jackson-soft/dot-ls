@@ -1,6 +1,9 @@
 #include "domain/entity/session.hpp"
 #include "server/server.hpp"
 
+#include <boost/program_options/options_description.hpp>
+#include <boost/program_options/parsers.hpp>
+#include <boost/program_options/variables_map.hpp>
 #include <cstdlib>
 #include <memory>
 
@@ -16,6 +19,20 @@
 #endif
 
 auto main(int argc, char **argv) -> int {
+    boost::program_options::options_description desc("Allowed options");
+    desc.add_options()("help,h", "produce a help message")("stdio",
+                                                           boost::program_options::value<std::string>(),
+                                                           "just an option");
+
+    boost::program_options::variables_map vm;
+    boost::program_options::store(parse_command_line(argc, argv, desc), vm);
+    notify(vm);
+
+    if (vm.count("help")) {
+        std::cout << desc << std::endl;
+        return EXIT_SUCCESS;
+    }
+
     SET_BINARY_MODE();
 
     server::Server server(std::make_shared<domain::entity::IOSession>());
