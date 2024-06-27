@@ -12,23 +12,23 @@ public:
     App()  = default;
     ~App() = default;
 
-    static auto Initialize(nlohmann::json params) -> const std::string {
+    auto Initialize(nlohmann::json params) -> const std::string {
         return "init";
     }
 
-    static auto Initialized(nlohmann::json params) -> const std::string {
+    auto Initialized(nlohmann::json params) -> const std::string {
         return "inited";
     }
 
-    static auto DidOpen(nlohmann::json params) -> const std::string {
+    auto DidOpen(nlohmann::json params) -> const std::string {
         return "open";
     }
 
-    static auto DidChange(nlohmann::json params) -> const std::string {
+    auto DidChange(nlohmann::json params) -> const std::string {
         return "change";
     }
 
-    static auto DidClose(nlohmann::json params) -> const std::string {
+    auto DidClose(nlohmann::json params) -> const std::string {
         return "close";
     }
 };

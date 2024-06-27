@@ -14,7 +14,9 @@ namespace server {
 
 class Server {
 public:
-    Server(std::shared_ptr<domain::entity::Session> session) : session_(session) {}
+    Server(std::shared_ptr<domain::entity::Session> session) : session_(session) {
+        enroll();
+    }
 
     ~Server() = default;
 
@@ -37,11 +39,11 @@ public:
 private:
     // 注册处理接口
     void enroll() {
-        handler_.emplace("initialize", app_.Initialize);
-        handler_.emplace("initialized", app_.Initialized);
-        handler_.emplace("textDocument/didOpen", app_.DidOpen);
-        handler_.emplace("textDocument/didChange", app_.DidChange);
-        handler_.emplace("textDocument/didClose", app_.DidClose);
+        handler_.emplace("initialize", std::bind(&app::App::Initialize, &app_, std::placeholders::_1));
+        handler_.emplace("initialized", std::bind(&app::App::Initialized, &app_, std::placeholders::_1));
+        handler_.emplace("textDocument/didOpen", std::bind(&app::App::DidOpen, &app_, std::placeholders::_1));
+        handler_.emplace("textDocument/didChange", std::bind(&app::App::DidChange, &app_, std::placeholders::_1));
+        handler_.emplace("textDocument/didClose", std::bind(&app::App::DidClose, &app_, std::placeholders::_1));
     }
 
     std::shared_ptr<domain::entity::Session> session_;
