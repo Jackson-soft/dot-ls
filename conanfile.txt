@@ -14,6 +14,3 @@ cmake_layout
 [options]
 *:shared=False
 boost/*:without_cobalt=False
-boost/*:with_stacktrace_backtrace=False
-boost/*:without_locale=True
-boost/*:without_stacktrace=True
