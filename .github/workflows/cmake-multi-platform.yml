@@ -65,7 +65,7 @@ jobs:
       run: conan profile detect
 
     - name: Update profile
-      run: conan profile -cc settings.compiler.libcxx=libstdc++11 settings.compiler.cppstd=c++23 default
+      run: conan profile -cc settings.compiler.libcxx=libstdc++11 settings.compiler.cppstd=23 default
 
     - name: Install dependencies
       run: conan install . -s build_type=${{ matrix.build_type }} --install-folder=${{github.workspace}}/build -b=missing -u
