@@ -59,7 +59,7 @@ jobs:
     - name: Get Conan
       shell: bash
       run: |
-        python3 -m pip install conan
+        python3 -m pip install conan --break-system-packages
 
     - name: Create default profile
       run: conan profile new default --detect
