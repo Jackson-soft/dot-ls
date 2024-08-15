@@ -7,7 +7,7 @@ debug:
 	conan install conanfile.txt -b=missing -u -s build_type=Debug
 
 install:
-	conan install conanfile.txt -b=missing -u
+	cmake --preset conan-debug
 
 build:
-	cmake --build --preset conan-debug
+	cmake --build build --preset conan-debug
