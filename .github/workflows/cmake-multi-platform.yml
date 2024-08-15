@@ -62,8 +62,9 @@ jobs:
               run: conan profile detect --force
 
             - name: Install dependencies
+              shell: bash
               run: |
-                  if [ ${{ runner.os }} == 'ubuntu-24.04' ]; then
+                  if [ ${{ runner.os }} == 'Linux' ]; then
                     conan install . -s compiler.cppstd=23 -s compiler.version=14 -b missing -u
                   else
                     conan install . -s compiler.cppstd=23 -b missing -u
