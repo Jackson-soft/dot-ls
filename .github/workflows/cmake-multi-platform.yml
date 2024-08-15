@@ -29,24 +29,13 @@ jobs:
                 build_type: [Release]
                 include:
                     - os: windows-latest
-                      c_compiler: cl
-                      cpp_compiler: cl
-                      target: windows
                       platform: win32-x64
                     - os: ubuntu-24.04
-                      c_compiler: gcc-14
                       cpp_compiler: g++-14
-                      target: linux
                       platform: linux-x64
                     - os: macos-latest
-                      c_compiler: apple-clang
-                      cpp_compiler: apple-clang
-                      target: darwin
                       platform: darwin-arm64
                     - os: macos-13
-                      c_compiler: apple-clang
-                      cpp_compiler: apple-clang
-                      target: darwin
                       platform: darwin-x64
 
         steps:
@@ -73,7 +62,13 @@ jobs:
             - name: Configure CMake
               # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
               # See https://cmake.org/cmake/help/latest/variable/CMAKE_BUILD_TYPE.html?highlight=cmake_build_type
-              run: cmake --preset conan-release -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }} -DCMAKE_C_COMPILER=${{ matrix.c_compiler }}
+              shell: bash
+              run: |
+                  if [ ${{ runner.os }} == 'Linux' ]; then
+                    cmake --preset conan-release -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }}
+                  else
+                    cmake --preset conan-release
+                  fi
 
             - name: Build
               # Build your program with the given configuration. Note that --config is needed because the default Windows generator is a multi-config generator (Visual Studio generator).
@@ -84,3 +79,13 @@ jobs:
               # Execute tests defined by the CMake configuration. Note that --build-config is needed because the default Windows generator is a multi-config generator (Visual Studio generator).
               # See https://cmake.org/cmake/help/latest/manual/ctest.1.html for more detail
               run: ctest --build-config ${{ matrix.build_type }}
+
+            - name: Upload artifacts
+              uses: actions/upload-artifact@v4
+              with:
+                  path: ${{github.workspace}}/build/dot-ls
+                  name: dot-ls-${{ matrix.platform }}
+
+            - name: Release
+              uses: softprops/action-gh-release@v2
+              if: startsWith(github.ref, 'refs/tags/')
