@@ -6,8 +6,8 @@ release:
 debug:
 	conan install conanfile.txt -b=missing -u -s build_type=Debug
 
-install:
+config:
 	cmake --preset conan-debug
 
-build:
+target:
 	cmake --build build --preset conan-debug

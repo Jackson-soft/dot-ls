@@ -79,6 +79,7 @@ jobs:
               with:
                   path: ${{github.workspace}}/build/${{ matrix.build_type }}/dot-ls
                   name: dot-ls-${{ matrix.platform }}
+                  overwrite: true
 
             - name: Release
               uses: softprops/action-gh-release@v2
