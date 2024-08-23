@@ -1,0 +1,11 @@
+digraph G {
+    node [shape=box, style=filled, fillcolor=lightblue];
+    A [label="Node A"];
+    B [label="Node B"];
+    C [label="Node C"];
+    D [label="Node D"];
+    A -> B [label="Edge 1"];
+    B -> C [label="Edge 2"];
+    C -> D [label="Edge 3"];
+    A -> D [label="Edge 4"];
+}

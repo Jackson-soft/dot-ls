@@ -8,7 +8,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
     message(STATUS "Configuring on/for macOS")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fcoroutines -fexperimental-library")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fexperimental-library")
 endif()
 
 find_package(Boost REQUIRED)

@@ -2,12 +2,13 @@
 
 // 应用模块
 
+#include <memory>
 #include <nlohmann/json.hpp>
 #include <string>
 
 namespace app {
 
-class App {
+class App : public std::enable_shared_from_this<app::App> {
 public:
     App()  = default;
     ~App() = default;
