@@ -58,7 +58,7 @@ jobs:
                   if [ ${{ runner.os }} == 'Linux' ]; then
                     conan install . -s compiler.cppstd=23 -s compiler.version=14 -b missing -u
                   elif [ ${{ runner.os }} == 'macOS' ]; then
-                    conan install . -s compiler.cppstd=23 -s compiler=${{ matrix.cpp_compiler }} -s compiler.version=15 -s compiler.runtime=static -s compiler.libcxx=c++_static -b missing -u
+                    conan install . -s compiler.cppstd=23 -s compiler=${{ matrix.cpp_compiler }} -s compiler.version=15 -s compiler.runtime=static -s compiler.libcxx=libc++ -b missing -u
                   else
                     conan install . -s compiler.cppstd=23 -s compiler.runtime=static -b missing -u
                   fi
