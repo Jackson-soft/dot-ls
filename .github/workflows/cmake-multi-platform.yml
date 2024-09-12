@@ -29,16 +29,15 @@ jobs:
                 build_type: [Release]
                 include:
                     - os: windows-latest
-                      cpp_compiler: cl
                       platform: win32-x64
                     - os: ubuntu-24.04
                       cpp_compiler: g++-14
                       platform: linux-x64
                     - os: macos-latest
-                      cpp_compiler: clang++
+                      cpp_compiler: clang
                       platform: darwin-arm64
                     - os: macos-13
-                      cpp_compiler: clang++
+                      cpp_compiler: clang
                       platform: darwin-x64
 
         steps:
@@ -55,13 +54,25 @@ jobs:
 
             - name: Install dependencies
               shell: bash
-              run: conan install . -s compiler.cppstd=23 -s compiler=${{ matrix.cpp_compiler }} -b missing -u
+              run: |
+                  if [ ${{ runner.os }} == 'Linux' ]; then
+                    conan install . -s compiler.cppstd=23 -s compiler.version=14 -b missing -u
+                  elif [ ${{ runner.os }} == 'macOS' ]; then
+                    conan install . -s compiler.cppstd=23 -s compiler=${{ matrix.cpp_compiler }} -b missing -u
+                  else
+                    conan install . -s compiler.cppstd=23 -b missing -u
+                  fi
 
             - name: Configure CMake
               # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
               # See https://cmake.org/cmake/help/latest/variable/CMAKE_BUILD_TYPE.html?highlight=cmake_build_type
               shell: bash
-              run: cmake --preset conan-release -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }}
+              run: |
+                  if [ ${{ runner.os }} == 'Windows' ]; then
+                    cmake --preset conan-release
+                  else
+                    cmake --preset conan-release -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }}
+                  fi
 
             - name: Build
               # Build your program with the given configuration. Note that --config is needed because the default Windows generator is a multi-config generator (Visual Studio generator).
