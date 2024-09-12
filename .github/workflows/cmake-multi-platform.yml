@@ -42,10 +42,13 @@ jobs:
 
         steps:
             - name: Install llvm
-              if: ${{ matrix.os == 'macos-latest' }}
+              if: runner.os == 'macOS'
               run: |
                   brew update
                   brew install llvm
+                  export PATH="/opt/homebrew/opt/llvm/bin:$PATH"
+                  export LDFLAGS="-L/opt/homebrew/opt/llvm/lib/c++ -L/opt/homebrew/opt/llvm/lib -lunwind"
+                  export CPPFLAGS="-I/opt/homebrew/opt/llvm/include"
             - name: Checkout
               uses: actions/checkout@v4
               with:
@@ -63,7 +66,7 @@ jobs:
                   if [ ${{ runner.os }} == 'Linux' ]; then
                     conan install . -s compiler.cppstd=23 -s compiler.version=14 -b missing -u
                   elif [ ${{ runner.os }} == 'macOS' ]; then
-                    conan install . -s compiler.cppstd=23 -s compiler=clang -s compiler.version=15 -s compiler.runtime=static -s compiler.libcxx=libc++ -b missing -u
+                    conan install . -s compiler.cppstd=23 -s compiler=clang -s compiler.version=18 -s compiler.runtime=static -s compiler.libcxx=libc++ -b missing -u
                   else
                     conan install . -s compiler.cppstd=23 -s compiler.runtime=static -b missing -u
                   fi
