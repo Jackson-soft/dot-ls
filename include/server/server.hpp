@@ -27,7 +27,7 @@ namespace server {
 class Server {
 public:
     Server(std::shared_ptr<domain::entity::Session> session)
-        : ioContext_(2), session_(session), app_(std::make_shared<app::App>()) {
+        : ioContext_(1), session_(session), app_(std::make_shared<app::App>()) {
         enroll();
     }
 
@@ -56,7 +56,7 @@ private:
     auto run() -> boost::cobalt::task<void> {
         while (true) {
             // 读取数据
-            std::size_t length = co_await read();
+            auto length = co_await read();
             // 解析数据
             std::string_view message(buffer_.data(), length);
             auto             success = request_.Parse(message);
@@ -67,7 +67,7 @@ private:
     }
 
     auto read() -> boost::cobalt::promise<std::size_t> {
-        co_return session_->Read(buffer_);
+        return session_->Read(buffer_);
     }
 
     auto dispatch(std::string_view method, nlohmann::json params) -> boost::cobalt::task<void> {

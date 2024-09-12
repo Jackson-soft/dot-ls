@@ -7,7 +7,6 @@
 #include <string>
 
 namespace app {
-
 class App : public std::enable_shared_from_this<app::App> {
 public:
     App()  = default;
