@@ -41,16 +41,26 @@ jobs:
                       platform: darwin-x64
 
         steps:
-            - name: Install llvm
-              if: runner.os == 'macOS'
+            - name: mac arm Install llvm
+              if: matrix.os == 'macos-latest'
               run: |
                   brew update
                   brew install llvm
-                  export PATH="/opt/homebrew/opt/llvm/bin:$PATH"
-                  export LDFLAGS="-L/opt/homebrew/opt/llvm/lib/c++ -L/opt/homebrew/opt/llvm/lib -lunwind"
-                  export CPPFLAGS="-I/opt/homebrew/opt/llvm/include"
-                  export CC=clang
-                  export CXX=clang++
+                  echo 'export PATH="/opt/homebrew/opt/llvm/bin:$PATH"' >> /Users/runner/.bash_profile
+                  echo 'export LDFLAGS="-L/opt/homebrew/opt/llvm/lib/c++ -L/opt/homebrew/opt/llvm/lib -lunwind"' >> /Users/runner/.bash_profile
+                  echo 'export CPPFLAGS="-I/opt/homebrew/opt/llvm/include"' >> /Users/runner/.bash_profile
+                  echo 'export CC=clang' >> /Users/runner/.bash_profile
+                  echo 'export CXX=clang++' >> /Users/runner/.bash_profile
+            - name: mac intel Install llvm
+              if: matrix.os == 'macos-13'
+              run: |
+                  brew update
+                  brew install llvm
+                  echo 'export PATH="/usr/local/opt/llvm/bin:$PATH"' >> /Users/runner/.bash_profile
+                  echo 'export LDFLAGS="-L/usr/local/opt/llvm/lib/c++ -L/usr/local/opt/llvm/lib -lunwind"' >> /Users/runner/.bash_profile
+                  echo 'export CPPFLAGS="-I/usr/local/opt/llvm/include"' >> /Users/runner/.bash_profile
+                  echo 'export CC=clang' >> /Users/runner/.bash_profile
+                  echo 'export CXX=clang++' >> /Users/runner/.bash_profile
             - name: Checkout
               uses: actions/checkout@v4
               with:
