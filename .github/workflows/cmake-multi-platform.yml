@@ -46,10 +46,11 @@ jobs:
               run: |
                   brew update
                   brew install llvm
-                  export CC=/opt/homebrew/opt/llvm/bin/clang
-                  export CXX=/opt/homebrew/opt/llvm/bin/clang++
+                  export PATH="/opt/homebrew/opt/llvm/bin:$PATH"
                   export LDFLAGS="-L/opt/homebrew/opt/llvm/lib/c++ -L/opt/homebrew/opt/llvm/lib -lunwind"
                   export CPPFLAGS="-I/opt/homebrew/opt/llvm/include"
+                  export CC=clang
+                  export CXX=clang++
             - name: Checkout
               uses: actions/checkout@v4
               with:
