@@ -34,8 +34,6 @@ target_link_libraries(${PROJECT_NAME}
     ${tree-sitter_LIBRARIES}
     ${Boost_LIBRARIES})
 
-
-
 enable_testing()
 
 find_package(Catch2 REQUIRED)
@@ -58,3 +56,4 @@ target_link_libraries(
     ${Boost_LIBRARIES})
 
 add_test(NAME ${unit_test} COMMAND $<TARGET_FILE:${unit_test}> --success)
+

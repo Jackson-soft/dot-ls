@@ -14,9 +14,9 @@ public:
 
     virtual ~Session() {}
 
-    virtual auto Read(std::span<char> buffer) -> boost::cobalt::promise<std::size_t> = 0;
-    virtual void Write(std::string_view content)                                     = 0;
-    virtual void Close()                                                             = 0;
+    virtual auto Read(std::span<char> buffer) -> std::size_t = 0;
+    virtual void Write(std::string_view content)             = 0;
+    virtual void Close()                                     = 0;
 };
 
 // 标准输入输出流实现
@@ -26,9 +26,9 @@ public:
 
     ~IOSession() override {}
 
-    auto Read(std::span<char> buffer) -> boost::cobalt::promise<std::size_t> override {
+    auto Read(std::span<char> buffer) -> std::size_t override {
         std::cin.peek();
-        co_return static_cast<std::size_t>(std::cin.readsome(buffer.data(), buffer.size()));
+        return static_cast<std::size_t>(std::cin.readsome(buffer.data(), buffer.size()));
     }
 
     void Write(std::string_view content) override {

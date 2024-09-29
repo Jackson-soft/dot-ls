@@ -16,6 +16,7 @@
 #include <boost/cobalt.hpp>
 #include <boost/cobalt/promise.hpp>
 #include <boost/cobalt/spawn.hpp>
+#include <boost/cobalt/task.hpp>
 #include <cstddef>
 #include <functional>
 #include <memory>
@@ -66,8 +67,8 @@ private:
         co_return;
     }
 
-    auto read() -> boost::cobalt::promise<std::size_t> {
-        return session_->Read(buffer_);
+    auto read() -> boost::cobalt::task<std::size_t> {
+        co_return session_->Read(buffer_);
     }
 
     auto dispatch(std::string_view method, nlohmann::json params) -> boost::cobalt::task<void> {
@@ -78,13 +79,13 @@ private:
         co_return;
     }
 
-    boost::asio::io_context                  ioContext_;
-    std::shared_ptr<domain::entity::Session> session_;
-    std::shared_ptr<app::App>                app_;
-    std::unordered_map<std::string, std::function<const std::string(nlohmann::json params)>> handler_{};  // 接口处理
-    std::array<char, 1024>    buffer_{};                                                                  // 数据
-    uranus::jsonrpc::Request  request_{};                                                                 // 请求
-    uranus::jsonrpc::Response response_{};                                                                // 响应
+    boost::asio::io_context                                                                  ioContext_;
+    std::shared_ptr<domain::entity::Session>                                                 session_;
+    std::shared_ptr<app::App>                                                                app_;
+    std::unordered_map<std::string, std::function<const std::string(nlohmann::json params)>> handler_{};   // 接口处理
+    std::array<char, 1024>                                                                   buffer_{};    // 数据
+    uranus::jsonrpc::Request                                                                 request_{};   // 请求
+    uranus::jsonrpc::Response                                                                response_{};  // 响应
 };
 
 }  // namespace server
