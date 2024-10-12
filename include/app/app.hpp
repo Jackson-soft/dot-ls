@@ -2,34 +2,42 @@
 
 // 应用模块
 
+#include "domain/model/basic.hpp"
+#include "domain/service/lifecycle.hpp"
+
 #include <memory>
 #include <nlohmann/json.hpp>
-#include <string>
 
 namespace app {
 class App : public std::enable_shared_from_this<app::App> {
 public:
-    App()  = default;
+    App() : lifecycle_(std::make_unique<domain::service::Lifecycle>()) {}
+
     ~App() = default;
 
-    auto Initialize(nlohmann::json params) -> const std::string {
-        return "init";
+    auto Initialize(const nlohmann::json &params) -> domain::model::Protocol {
+        auto input = domain::model::InitializeParams();
+        input.Decode(params);
+        return lifecycle_->Initialize(input);
     }
 
-    auto Initialized(nlohmann::json params) -> const std::string {
-        return "inited";
+    auto Initialized(const nlohmann::json &params) -> domain::model::Protocol {
+        return {};
     }
 
-    auto DidOpen(nlohmann::json params) -> const std::string {
-        return "open";
+    auto DidOpen(const nlohmann::json &params) -> domain::model::Protocol {
+        return {};
     }
 
-    auto DidChange(nlohmann::json params) -> const std::string {
-        return "change";
+    auto DidChange(const nlohmann::json &params) -> domain::model::Protocol {
+        return {};
     }
 
-    auto DidClose(nlohmann::json params) -> const std::string {
-        return "close";
+    auto DidClose(const nlohmann::json &params) -> domain::model::Protocol {
+        return {};
     }
+
+private:
+    std::unique_ptr<domain::service::Lifecycle> lifecycle_;
 };
 }  // namespace app

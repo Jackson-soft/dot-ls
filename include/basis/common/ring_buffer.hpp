@@ -8,8 +8,8 @@ namespace basis::common {
 template<typename T>
 class RingBuffer {
 public:
-    RingBuffer(std::size_t capacity) {}
+    explicit RingBuffer(std::size_t capacity) {}
 
-    ~RingBuffer() {}
+    ~RingBuffer() = default;
 };
 }  // namespace basis::common

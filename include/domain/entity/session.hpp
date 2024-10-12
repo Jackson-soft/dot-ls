@@ -12,7 +12,7 @@ class Session {
 public:
     Session() = default;
 
-    virtual ~Session() {}
+    virtual ~Session() = default;
 
     virtual auto Read(std::span<char> buffer) -> std::size_t = 0;
     virtual void Write(std::string_view content)             = 0;
@@ -24,7 +24,7 @@ class IOSession : public Session, std::enable_shared_from_this<IOSession> {
 public:
     IOSession() = default;
 
-    ~IOSession() override {}
+    ~IOSession() override = default;
 
     auto Read(std::span<char> buffer) -> std::size_t override {
         std::cin.peek();

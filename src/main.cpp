@@ -29,8 +29,8 @@ auto main(int argc, char **argv) -> int {
     boost::program_options::store(boost::program_options::parse_command_line(argc, argv, desc), vm);
     boost::program_options::notify(vm);
 
-    if (vm.count("help")) {
-        std::cout << desc << std::endl;
+    if (vm.count("help") != 0U) {
+        std::cout << desc << '\n';
         return EXIT_SUCCESS;
     }
 

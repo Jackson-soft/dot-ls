@@ -4,6 +4,7 @@
 
 #include "app/app.hpp"
 #include "domain/entity/session.hpp"
+#include "domain/model/basic.hpp"
 #include "jsonrpc/request.hpp"
 #include "jsonrpc/response.hpp"
 
@@ -22,13 +23,14 @@
 #include <memory>
 #include <nlohmann/json.hpp>
 #include <unordered_map>
+#include <utility>
 
 namespace server {
 
 class Server {
 public:
-    Server(std::shared_ptr<domain::entity::Session> session)
-        : ioContext_(1), session_(session), app_(std::make_shared<app::App>()) {
+    explicit Server(std::shared_ptr<domain::entity::Session> session)
+        : ioContext_(1), session_(std::move(session)), app_(std::make_shared<app::App>()) {
         enroll();
     }
 
@@ -73,19 +75,22 @@ private:
 
     auto dispatch(std::string_view method, nlohmann::json params) -> boost::cobalt::task<void> {
         if (auto handler = handler_.find(method.data()); handler != handler_.end()) {
-            session_->Write(handler->second(params));
+            auto result = handler->second(params);
+            response_.AddResult(result.Encode());
+            session_->Write(response_.String());
         }
 
         co_return;
     }
 
-    boost::asio::io_context                                                                  ioContext_;
-    std::shared_ptr<domain::entity::Session>                                                 session_;
-    std::shared_ptr<app::App>                                                                app_;
-    std::unordered_map<std::string, std::function<const std::string(nlohmann::json params)>> handler_{};   // 接口处理
-    std::array<char, 1024>                                                                   buffer_{};    // 数据
-    uranus::jsonrpc::Request                                                                 request_{};   // 请求
-    uranus::jsonrpc::Response                                                                response_{};  // 响应
+    boost::asio::io_context                  ioContext_;
+    std::shared_ptr<domain::entity::Session> session_;
+    std::shared_ptr<app::App>                app_;
+    std::unordered_map<std::string, std::function<domain::model::Protocol(const nlohmann::json &params)>>
+                              handler_{};   // 接口处理
+    std::array<char, 1024>    buffer_{};    // 数据
+    uranus::jsonrpc::Request  request_{};   // 请求
+    uranus::jsonrpc::Response response_{};  // 响应
 };
 
 }  // namespace server
