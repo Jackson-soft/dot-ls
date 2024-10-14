@@ -59,25 +59,27 @@ private:
     auto run() -> boost::cobalt::task<void> {
         while (true) {
             // 读取数据
-            auto length = co_await read();
-            // 解析数据
-            std::string_view message(buffer_.data(), length);
-            auto             success = request_.Parse(message);
-            // 消息分发
-            co_await dispatch(request_.Method(), request_.Params());
+            if (auto success = co_await read(); success) {
+                // 消息分发
+                co_await dispatch(request_.Method(), request_.Params());
+            }
         }
         co_return;
     }
 
-    auto read() -> boost::cobalt::task<std::size_t> {
-        co_return session_->Read(buffer_);
+    auto read() -> boost::cobalt::task<bool> {
+        auto length = session_->Read(buffer_);
+        // 解析数据
+        std::string_view message(buffer_.data(), length);
+        auto             success = request_.Parse(message);
+        co_return success;
     }
 
     auto dispatch(std::string_view method, nlohmann::json params) -> boost::cobalt::task<void> {
         if (auto handler = handler_.find(method.data()); handler != handler_.end()) {
             auto result = handler->second(params);
             response_.AddResult(result.Encode());
-            session_->Write(response_.String());
+            session_->Write(response_.LspString());
         }
 
         co_return;
