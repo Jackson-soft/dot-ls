@@ -48,7 +48,7 @@ jobs:
               shell: bash
               run: |
                   pipx install conan
-                  export PATH=$PATH:~/.local/bin
+                  pipx ensurepath
                   conan profile detect --force
 
             - name: Install dependencies
