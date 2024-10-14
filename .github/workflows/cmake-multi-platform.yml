@@ -47,7 +47,7 @@ jobs:
             - name: Get Conan
               shell: bash
               run: |
-                  python3 -m pip install --user conan
+                  pipx install conan
                   export PATH=$PATH:~/.local/bin
                   conan profile detect --force
 
