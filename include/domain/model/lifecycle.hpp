@@ -11,21 +11,6 @@
 #include <vector>
 
 namespace domain::model {
-struct WorkDoneProgressOptions : public Protocol {
-    bool workDoneProgress;
-};
-
-struct CompletionItem : public Protocol {
-    bool labelDetailsSupport;
-};
-
-struct CompletionOptions : public WorkDoneProgressOptions {
-    std::vector<std::string> triggerCharacters;
-    std::vector<std::string> allCommitCharacters;
-    bool                     resolveProvider;
-    CompletionItem           completionItem;
-};
-
 struct SignatureHelpOptions : public WorkDoneProgressOptions {
     std::vector<std::string> triggerCharacters;
     std::vector<std::string> retriggerCharacters;
@@ -133,23 +118,7 @@ struct ServerCapabilities : public Protocol {
     std::any                        experimental;
 };
 
-struct WorkDoneProgressParams : public Protocol {
-    void Decode(const nlohmann::json &json) override {
-        workDoneToken = json["workDoneToken"].template get<std::string>();
-    }
-
-    auto Encode() -> nlohmann::json override {
-        nlohmann::json json;
-
-        json["workDoneToken"] = workDoneToken;
-
-        return json;
-    }
-
-    std::string workDoneToken;
-};
-
-struct ClientCapabilities {};
+struct ClientCapabilities : public Protocol {};
 
 struct WorkspaceFolder : public Protocol {
     std::string uri;

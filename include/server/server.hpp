@@ -46,14 +46,31 @@ public:
         ioContext_.stop();
     }
 
+    auto Shutdown(const nlohmann::json &params) -> domain::model::Protocol {
+        Close();
+        return {};
+    }
+
+    auto Exit(const nlohmann::json &params) -> domain::model::Protocol {
+        Close();
+        return {};
+    }
+
 private:
     // 注册处理接口
     void enroll() {
         handler_.emplace("initialize", std::bind(&app::App::Initialize, app_.get(), std::placeholders::_1));
         handler_.emplace("initialized", std::bind(&app::App::Initialized, app_.get(), std::placeholders::_1));
         handler_.emplace("textDocument/didOpen", std::bind(&app::App::DidOpen, app_.get(), std::placeholders::_1));
+        handler_.emplace("textDocument/didSave", std::bind(&app::App::DidSave, app_.get(), std::placeholders::_1));
         handler_.emplace("textDocument/didChange", std::bind(&app::App::DidChange, app_.get(), std::placeholders::_1));
         handler_.emplace("textDocument/didClose", std::bind(&app::App::DidClose, app_.get(), std::placeholders::_1));
+        handler_.emplace("textDocument/rename", std::bind(&app::App::Rename, app_.get(), std::placeholders::_1));
+        handler_.emplace("textDocument/completion",
+                         std::bind(&app::App::Completion, app_.get(), std::placeholders::_1));
+        handler_.emplace("completionItem/resolve", std::bind(&app::App::Resolve, app_.get(), std::placeholders::_1));
+        handler_.emplace("shutdown", std::bind(&Server::Shutdown, this, std::placeholders::_1));
+        handler_.emplace("exit", std::bind(&Server::Exit, this, std::placeholders::_1));
     }
 
     auto run() -> boost::cobalt::task<void> {

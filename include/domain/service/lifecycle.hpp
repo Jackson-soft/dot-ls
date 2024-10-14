@@ -1,6 +1,7 @@
 #pragma once
 
 #include "basis/boot/flag.hpp"
+#include "domain/model/basic.hpp"
 #include "domain/model/lifecycle.hpp"
 
 // 生命周期相关服务
