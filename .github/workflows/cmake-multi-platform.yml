@@ -45,7 +45,7 @@ jobs:
                   submodules: "true"
 
             - name: Get Conan
-              run: python3 -m pip install conan --break-system-packages
+              run: python3 -m pip install conan
 
             - name: Create default profile
               run: conan profile detect --force
@@ -64,10 +64,12 @@ jobs:
               # See https://cmake.org/cmake/help/latest/variable/CMAKE_BUILD_TYPE.html?highlight=cmake_build_type
               shell: bash
               run: |
-                  if [ ${{ runner.os }} == 'Linux' ]; then
-                  	cmake --preset conan-release -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }}
+                  if [ ${{ runner.os }} == 'Windows' ]; then
+                    cmake --preset conan-default
+                  elif [ ${{ runner.os }} == 'Linux' ]; then
+                    cmake --preset conan-release -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }}
                   else
-                   	cmake --preset conan-default
+                    cmake --preset conan-release
                   fi
 
             - name: Build
