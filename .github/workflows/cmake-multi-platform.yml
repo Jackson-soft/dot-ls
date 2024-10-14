@@ -45,10 +45,11 @@ jobs:
                   submodules: "true"
 
             - name: Get Conan
-              run: python3 -m pip install conan
-
-            - name: Create default profile
-              run: conan profile detect --force
+              shell: bash
+              run: |
+                  python3 -m pip install --user conan
+                  export PATH=$PATH:~/.local/bin
+                  conan profile detect --force
 
             - name: Install dependencies
               shell: bash
