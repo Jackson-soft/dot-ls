@@ -1,3 +1,4 @@
+#include "basis/boot/boot.hpp"
 #include "domain/entity/session.hpp"
 #include "server/server.hpp"
 
@@ -35,6 +36,12 @@ auto main(int argc, char **argv) -> int {
     }
 
     SET_BINARY_MODE();
+
+    if (!basic::boot::Boot()) {
+        return EXIT_FAILURE;
+    }
+
+    uranus::utils::LogHelper::Instance().Info("server start");
 
     server::Server server(std::make_shared<domain::entity::IOSession>());
 

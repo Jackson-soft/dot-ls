@@ -4,7 +4,9 @@
 #include <cstdint>
 #include <nlohmann/json.hpp>
 #include <nlohmann/json_fwd.hpp>
+#include <optional>
 #include <string>
+#include <variant>
 #include <vector>
 
 namespace domain::model {
@@ -18,10 +20,21 @@ struct Protocol {
         return nlohmann::json::object();
     }
 
-    virtual void Decode(const nlohmann::json &json) {}
+    virtual void Decode(const nlohmann::json &input) {}
 };
 
+struct RegularExpressionsClientCapabilities : public Protocol {
+    std::string                engine;
+    std::optional<std::string> version;
+};
+
+const std::vector<std::string> EOL{"\n", "\r\n", "\r"};
+
 struct Position : public Protocol {
+    Position() = default;
+
+    Position(std::uint64_t line, std::uint64_t character) : line(line), character(character) {}
+
     auto Encode() -> nlohmann::json override {
         auto object         = nlohmann::json::object();
         object["line"]      = line;
@@ -57,59 +70,28 @@ struct Range : public Protocol {
     Position end;
 };
 
-struct Location : public Protocol {
+struct TextDocumentItem : public Protocol {
+    void Decode(const nlohmann::json &input) override {
+        uri        = input["uri"].template get<std::string>();
+        languageId = input["languageId"];
+        version    = input["version"];
+        text       = input["text"];
+    }
+
     auto Encode() -> nlohmann::json override {
-        auto object     = nlohmann::json::object();
-        object["range"] = range.Encode();
-        object["uri"]   = uri;
+        auto output          = nlohmann::json::object();
+        output["uri"]        = uri;
+        output["languageId"] = languageId;
+        output["version"]    = version;
+        output["text"]       = text;
 
-        return object;
+        return output;
     }
 
-    void Decode(const nlohmann::json &json) override {
-        range.Decode(json["range"]);
-        uri = json["uri"];
-    }
-
-    std::string uri;
-    Range       range;
-};
-
-enum class DiagnosticSeverity { Error = 1, Warning = 2, Information = 3, Hint = 4 };
-
-enum class DiagnosticTag { Unnecessary = 1, Deprecated = 2 };
-
-struct DiagnosticRelatedInformation : public Protocol {
-    Location    location;
-    std::string message;
-};
-
-struct Diagnostic : public Protocol {
-    Range                      range;
-    DiagnosticSeverity         severity;
-    std::string                code;
-    std::string                codeDescription;
-    std::string                source;
-    std::string                message;
-    std::vector<DiagnosticTag> tags;
-    std::string                data;
-};
-
-struct TextEdit : public Protocol {
-    Range       range;
-    std::string newText;
-};
-
-struct Command : public Protocol {
-    std::string           title;
-    std::string           command;
-    std::vector<std::any> arguments;
-};
-
-struct DocumentFilter : public Protocol {
-    std::string language;  // A language id, like `typescript`.
-    std::string scheme;    // A Uri scheme, like `file` or `untitled`.
-    std::string pattern;   // A glob pattern, like `*.{ts,js}`.
+    std::string  uri;
+    std::string  languageId;  // dot
+    std::int64_t version;
+    std::string  text;
 };
 
 struct TextDocumentIdentifier : public Protocol {
@@ -136,34 +118,106 @@ struct TextDocumentPositionParams : public Protocol {
     Position               position;
 };
 
+struct DocumentFilter : public Protocol {
+    std::string language;  // A language id, like `typescript`.
+    std::string scheme;    // A Uri scheme, like `file` or `untitled`.
+    std::string pattern;   // A glob pattern, like `*.{ts,js}`.
+};
+
+struct TextEdit : public Protocol {
+    Range       range;
+    std::string newText;
+};
+
+struct Location : public Protocol {
+    auto Encode() -> nlohmann::json override {
+        auto object     = nlohmann::json::object();
+        object["range"] = range.Encode();
+        object["uri"]   = uri;
+
+        return object;
+    }
+
+    void Decode(const nlohmann::json &json) override {
+        range.Decode(json["range"]);
+        uri = json["uri"];
+    }
+
+    std::string uri;
+    Range       range;
+};
+
+struct CodeDescription : public Protocol {
+    std::string href;
+};
+
+enum class DiagnosticSeverity { Error = 1, Warning = 2, Information = 3, Hint = 4 };
+
+enum class DiagnosticTag { Unnecessary = 1, Deprecated = 2 };
+
+struct DiagnosticRelatedInformation : public Protocol {
+    Location    location;
+    std::string message;
+};
+
+struct Diagnostic : public Protocol {
+    Range                                     range;
+    DiagnosticSeverity                        severity;
+    std::string                               code;
+    CodeDescription                           codeDescription;
+    std::string                               source;
+    std::string                               message;
+    std::vector<DiagnosticTag>                tags;
+    std::vector<DiagnosticRelatedInformation> relatedInformation;
+    std::string                               data;
+};
+
+struct Command : public Protocol {
+    std::string           title;
+    std::string           command;
+    std::vector<std::any> arguments;
+};
+
 struct TextDocumentContentChangeEvent : public Protocol {
     Range         range;
     std::uint64_t rangeLength;
     std::string   text;
 };
 
-struct PartialResultParams : public Protocol {
-    std::string partialResultToken;
+struct WorkDoneProgressOptions : public Protocol {
+    std::optional<bool> workDoneProgress;
 };
 
-struct WorkDoneProgressOptions : public Protocol {
-    bool workDoneProgress;
-};
+using ProgressToken = std::variant<int, std::string>;
 
 struct WorkDoneProgressParams : public Protocol {
-    void Decode(const nlohmann::json &json) override {
-        workDoneToken = json["workDoneToken"].template get<std::string>();
+    void Decode(const nlohmann::json &input) override {
+        if (input.contains("workDoneToken")) {
+            if (input["workDoneToken"].is_number_integer()) {
+                workDoneToken = input["workDoneToken"].template get<int>();
+            } else if (input["workDoneToken"].is_string()) {
+                workDoneToken = input["workDoneToken"].template get<std::string>();
+            }
+        }
     }
 
     auto Encode() -> nlohmann::json override {
-        nlohmann::json json;
+        nlohmann::json output;
 
-        json["workDoneToken"] = workDoneToken;
+        if (workDoneToken.index() == 0) {
+            output["workDoneToken"] = std::get<int>(workDoneToken);
+        } else {
+            output["workDoneToken"] = std::get<std::string>(workDoneToken);
+        }
 
-        return json;
+        return output;
     }
 
-    std::string workDoneToken;
+    ProgressToken workDoneToken;
+};
+
+struct PartialResultParams : public Protocol {
+    std::string partialResultToken;
 };
 
 enum class CompletionItemKind {

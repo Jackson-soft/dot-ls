@@ -19,6 +19,7 @@ endif ()
 find_package(Boost REQUIRED)
 find_package(nlohmann_json REQUIRED)
 find_package(tree-sitter REQUIRED)
+find_package(spdlog REQUIRED)
 
 add_executable(${PROJECT_NAME} src/main.cpp)
 target_include_directories(${PROJECT_NAME}
@@ -27,11 +28,13 @@ PRIVATE
     ${PROJECT_SOURCE_DIR}/third_party/uranus/include
     ${nlohmann_json_INCLUDE_DIRS}
     ${tree-sitter_INCLUDE_DIRS}
+    ${spdlog_INCLUDE_DIRS}
     ${Boost_INCLUDE_DIRS})
 
 target_link_libraries(${PROJECT_NAME}
     ${nlohmann_json_LIBRARIES}
     ${tree-sitter_LIBRARIES}
+    ${spdlog_LIBRARIES}
     ${Boost_LIBRARIES})
 
 enable_testing()

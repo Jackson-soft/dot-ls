@@ -14,30 +14,6 @@ struct TextDocumentSyncOptions : public Protocol {
     TextDocumentSyncKind change    = TextDocumentSyncKind::None;
 };
 
-struct TextDocumentItem : public Protocol {
-    void Decode(const nlohmann::json &input) override {
-        uri        = input["uri"].template get<std::string>();
-        languageId = input["languageId"];
-        version    = input["version"];
-        text       = input["text"];
-    }
-
-    auto Encode() -> nlohmann::json override {
-        auto output          = nlohmann::json::object();
-        output["uri"]        = uri;
-        output["languageId"] = languageId;
-        output["version"]    = version;
-        output["text"]       = text;
-
-        return output;
-    }
-
-    std::string  uri;
-    std::string  languageId;  // dot
-    std::int64_t version;
-    std::string  text;
-};
-
 struct DidOpenTextDocumentParams : public Protocol {
     void Decode(const nlohmann::json &input) override {
         textDocument.Decode(input["textDocument"].template get<nlohmann::json>());

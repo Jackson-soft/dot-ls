@@ -7,6 +7,7 @@
 #include "domain/model/basic.hpp"
 #include "jsonrpc/request.hpp"
 #include "jsonrpc/response.hpp"
+#include "utils/log.hpp"
 
 #include <array>
 #include <boost/asio/detached.hpp>
@@ -18,7 +19,6 @@
 #include <boost/cobalt/promise.hpp>
 #include <boost/cobalt/spawn.hpp>
 #include <boost/cobalt/task.hpp>
-#include <cstddef>
 #include <functional>
 #include <memory>
 #include <nlohmann/json.hpp>
@@ -88,7 +88,10 @@ private:
         auto length = session_->Read(buffer_);
         // 解析数据
         std::string_view message(buffer_.data(), length);
-        auto             success = request_.Parse(message);
+
+        uranus::utils::LogHelper::Instance().Info(message.data());
+
+        auto success = request_.Parse(message);
         co_return success;
     }
 
