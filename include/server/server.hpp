@@ -89,7 +89,7 @@ private:
         // 解析数据
         std::string_view message(buffer_.data(), length);
 
-        uranus::utils::LogHelper::Instance().Info(message.data());
+        uranus::utils::LogHelper::Instance().Info("reslove message {}\n", message.data());
 
         auto success = request_.Parse(message);
         co_return success;
