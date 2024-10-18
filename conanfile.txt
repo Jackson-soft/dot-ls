@@ -16,3 +16,4 @@ cmake_layout
 *:shared=False
 boost/*:without_cobalt=False
 boost/*:without_stacktrace=True
+spdlog/*:use_std_fmt=True
