@@ -228,6 +228,7 @@
   {
     "type": "source_file",
     "named": true,
+    "root": true,
     "fields": {
       "block": {
         "multiple": false,
