@@ -8,6 +8,7 @@
 #include <cstdlib>
 #include <iostream>
 #include <memory>
+#include <print>
 
 // https://stackoverflow.com/questions/1598985/c-read-binary-stdin
 #ifdef _WIN32
@@ -22,9 +23,7 @@
 
 auto main(int argc, char **argv) -> int {
     boost::program_options::options_description desc("Allowed options");
-    desc.add_options()("help,h", "produce a help message")("stdio",
-                                                           boost::program_options::value<std::string>(),
-                                                           "just an option");
+    desc.add_options()("help,h", "produce a help message")("version,v", "print version string");
 
     boost::program_options::variables_map vm;
     boost::program_options::store(boost::program_options::parse_command_line(argc, argv, desc), vm);
@@ -32,6 +31,10 @@ auto main(int argc, char **argv) -> int {
 
     if (vm.count("help") != 0U) {
         std::cout << desc << '\n';
+        return EXIT_SUCCESS;
+    }
+    if (vm.count("version") != 0U) {
+        std::print("{}\n", basic::boot::Version);
         return EXIT_SUCCESS;
     }
 

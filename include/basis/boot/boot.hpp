@@ -21,10 +21,12 @@ inline auto HomeDirectory() -> std::filesystem::path {
 }
 
 inline auto Boot() -> bool {
-    auto                        home    = HomeDirectory();
-    std::filesystem::path const logPath = home / std::filesystem::path{".cache/dot-ls/logs"};
+    auto home    = HomeDirectory();
+    auto logPath = home / std::filesystem::path{".cache/dot-ls/logs"};
     if (!std::filesystem::exists(logPath)) {
-        std::filesystem::create_directories(logPath);
+        if (!std::filesystem::create_directories(logPath)) {
+            return false;
+        }
     }
 
     auto logFile = logPath / std::filesystem::path{"rotating.log"};
