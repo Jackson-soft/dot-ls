@@ -21,8 +21,7 @@ inline auto HomeDirectory() -> std::filesystem::path {
 }
 
 inline auto Boot() -> bool {
-    auto home    = HomeDirectory();
-    auto logPath = home / std::filesystem::path{".cache/dot-ls/logs"};
+    auto logPath = HomeDirectory() / std::filesystem::path{".cache/dot-ls/logs"};
     if (!std::filesystem::exists(logPath)) {
         if (!std::filesystem::create_directories(logPath)) {
             return false;
