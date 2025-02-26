@@ -1,5 +1,7 @@
 #pragma once
 
+#include "utils/log.hpp"
+
 #include <boost/cobalt/promise.hpp>
 #include <iostream>
 #include <memory>
@@ -27,8 +29,12 @@ public:
     ~IOSession() override = default;
 
     auto Read(std::span<char> buffer) -> std::size_t override {
+        char buffers[1024];
         std::cin.peek();
-        return static_cast<std::size_t>(std::cin.readsome(buffer.data(), buffer.size()));
+        auto length = static_cast<std::size_t>(std::cin.readsome(buffers, std::size(buffers)));
+        uranus::utils::LogHelper::Instance().Info("read message length: {}\n", length);
+
+        return length;
     }
 
     void Write(std::string_view content) override {

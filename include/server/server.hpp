@@ -36,9 +36,15 @@ public:
 
     ~Server() = default;
 
-    void Run() {
-        boost::cobalt::spawn(ioContext_, run(), boost::asio::detached);
-        ioContext_.run();
+    auto Run() -> boost::cobalt::task<void> {
+        while (true) {
+            // 读取数据
+            if (auto success = co_await read(); success) {
+                // 消息分发
+                co_await dispatch(request_.Method(), request_.Params());
+            }
+        }
+        co_return;
     }
 
     void Close() {
@@ -84,7 +90,7 @@ private:
         co_return;
     }
 
-    auto read() -> boost::cobalt::task<bool> {
+    auto read() -> boost::cobalt::promise<bool> {
         auto length = session_->Read(buffer_);
         // 解析数据
         std::string_view message(buffer_.data(), length);

@@ -2,6 +2,8 @@
 #include "domain/entity/session.hpp"
 #include "server/server.hpp"
 
+#include <boost/asio/thread_pool.hpp>
+#include <boost/cobalt/run.hpp>
 #include <boost/program_options/options_description.hpp>
 #include <boost/program_options/parsers.hpp>
 #include <boost/program_options/variables_map.hpp>
@@ -48,7 +50,11 @@ auto main(int argc, char **argv) -> int {
 
     server::Server server(std::make_shared<domain::entity::IOSession>());
 
-    server.Run();
+    boost::asio::thread_pool tp{3};
+
+    boost::cobalt::spawn(tp.get_executor(), server.Run(), boost::asio::detached);
+
+    tp.join();
 
     return EXIT_SUCCESS;
 }
