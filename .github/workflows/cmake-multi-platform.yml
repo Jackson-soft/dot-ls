@@ -25,7 +25,7 @@ jobs:
             #
             # To add more build types (Release, Debug, RelWithDebInfo, etc.) customize the build_type list.
             matrix:
-                os: [windows-latest, ubuntu-latest, macos-latest, macos-13]
+                os: [windows-latest, ubuntu-latest, macos-latest, macos-latest-large]
                 build_type: [Release]
                 include:
                     - os: windows-latest
@@ -35,7 +35,7 @@ jobs:
                       platform: linux-x64
                     - os: macos-latest
                       platform: darwin-arm64
-                    - os: macos-13
+                    - os: macos-latest-large
                       platform: darwin-x64
 
         steps:
