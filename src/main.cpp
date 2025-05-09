@@ -3,7 +3,6 @@
 #include "server/server.hpp"
 
 #include <boost/asio/thread_pool.hpp>
-#include <boost/cobalt/run.hpp>
 #include <boost/program_options/options_description.hpp>
 #include <boost/program_options/parsers.hpp>
 #include <boost/program_options/variables_map.hpp>
@@ -23,7 +22,7 @@
 #define SET_BINARY_MODE() (void)0
 #endif
 
-auto main(int argc, char **argv) -> int {
+auto co_main(int argc, char **argv) -> boost::cobalt::main {
     boost::program_options::options_description desc("Allowed options");
     desc.add_options()("help,h", "produce a help message")("version,v", "print version string");
 
@@ -31,19 +30,19 @@ auto main(int argc, char **argv) -> int {
     boost::program_options::store(boost::program_options::parse_command_line(argc, argv, desc), vm);
     boost::program_options::notify(vm);
 
-    if (vm.count("help") != 0U) {
+    if (vm.contains("help")) {
         std::cout << desc << '\n';
-        return EXIT_SUCCESS;
+        co_return 0u;
     }
-    if (vm.count("version") != 0U) {
+    if (vm.contains("version")) {
         std::print("{}\n", basic::boot::Version);
-        return EXIT_SUCCESS;
+        co_return 0u;
     }
 
     SET_BINARY_MODE();
 
     if (!basic::boot::Boot()) {
-        return EXIT_FAILURE;
+        co_return 1u;
     }
 
     uranus::utils::LogHelper::Instance().Info("server start");
@@ -56,5 +55,5 @@ auto main(int argc, char **argv) -> int {
 
     tp.join();
 
-    return EXIT_SUCCESS;
+    co_return 0u;
 }

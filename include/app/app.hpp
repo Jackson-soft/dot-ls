@@ -12,10 +12,7 @@
 namespace app {
 class App : public std::enable_shared_from_this<app::App> {
 public:
-    App()
-        : lifecycle_(std::make_unique<domain::service::Lifecycle>()),
-          document_(std::make_unique<domain::service::Document>()) {}
-
+    App()  = default;
     ~App() = default;
 
     auto Initialize(const nlohmann::json &params) -> domain::model::Protocol {
@@ -59,7 +56,7 @@ public:
     }
 
 private:
-    std::unique_ptr<domain::service::Lifecycle> lifecycle_;
-    std::unique_ptr<domain::service::Document>  document_;
+    std::unique_ptr<domain::service::Lifecycle> lifecycle_{std::make_unique<domain::service::Lifecycle>()};
+    std::unique_ptr<domain::service::Document>  document_{std::make_unique<domain::service::Document>()};
 };
 }  // namespace app

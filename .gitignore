@@ -7,3 +7,4 @@ compile_commands.json
 *.png
 .DS_Store
 *.user
+*.cmake

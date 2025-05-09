@@ -26,11 +26,10 @@
 #include <utility>
 
 namespace server {
-
 class Server {
 public:
     explicit Server(std::shared_ptr<domain::entity::Session> session)
-        : ioContext_(1), session_(std::move(session)), app_(std::make_shared<app::App>()) {
+        : session_(std::move(session)), app_(std::make_shared<app::App>()) {
         enroll();
     }
 
@@ -39,12 +38,11 @@ public:
     auto Run() -> boost::cobalt::task<void> {
         while (true) {
             // 读取数据
-            if (auto success = co_await read(); success) {
+            if (const auto success = co_await read(); success) {
                 // 消息分发
                 co_await dispatch(request_.Method(), request_.Params());
             }
         }
-        co_return;
     }
 
     void Close() {
@@ -82,12 +80,11 @@ private:
     auto run() -> boost::cobalt::task<void> {
         while (true) {
             // 读取数据
-            if (auto success = co_await read(); success) {
+            if (const auto success = co_await read(); success) {
                 // 消息分发
                 co_await dispatch(request_.Method(), request_.Params());
             }
         }
-        co_return;
     }
 
     auto read() -> boost::cobalt::promise<bool> {
@@ -111,14 +108,13 @@ private:
         co_return;
     }
 
-    boost::asio::io_context                  ioContext_;
     std::shared_ptr<domain::entity::Session> session_;
     std::shared_ptr<app::App>                app_;
+    boost::asio::io_context                  ioContext_{1};
     std::unordered_map<std::string, std::function<domain::model::Protocol(const nlohmann::json &params)>>
-                              handler_{};   // 接口处理
-    std::array<char, 1024>    buffer_{};    // 数据
-    uranus::jsonrpc::Request  request_{};   // 请求
-    uranus::jsonrpc::Response response_{};  // 响应
+    handler_{};                            // 接口处理
+    std::array<char, 1024>    buffer_{};   // 数据
+    uranus::jsonrpc::Request  request_{};  // 请求
+    uranus::jsonrpc::Response response_{}; // 响应
 };
-
-}  // namespace server
+} // namespace server

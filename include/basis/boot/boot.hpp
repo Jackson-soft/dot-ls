@@ -21,15 +21,15 @@ inline auto HomeDirectory() -> std::filesystem::path {
 }
 
 inline auto Boot() -> bool {
-    auto logPath = HomeDirectory() / std::filesystem::path{".cache/dot-ls/logs"};
+    const auto logPath = HomeDirectory() / std::filesystem::path{".cache/dot-ls/logs"};
     if (!std::filesystem::exists(logPath)) {
         if (!std::filesystem::create_directories(logPath)) {
             return false;
         }
     }
 
-    auto logFile = logPath / std::filesystem::path{"rotating.log"};
+    const auto logFile = logPath / std::filesystem::path{"rotating.log"};
     uranus::utils::LogHelper::Instance().Initalize(logFile.c_str());
     return true;
 }
-}  // namespace basic::boot
+} // namespace basic::boot

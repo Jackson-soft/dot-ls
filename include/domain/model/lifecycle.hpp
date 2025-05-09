@@ -48,7 +48,7 @@ struct FileOperationPatternOptions : public Protocol {
 
 struct FileOperationPattern : public Protocol {
     std::string                 glob;
-    std::string                 matches;  // 'file' | 'folder'
+    std::string                 matches; // 'file' | 'folder'
     FileOperationPatternOptions options;
 };
 
@@ -81,7 +81,7 @@ struct Workspace : public Protocol {
 };
 
 struct ServerCapabilities : public Protocol {
-    std::string                     positionEncoding;  // utff-8, utf-16, utf-32
+    std::string                     positionEncoding; // utf-8, utf-16, utf-32
     TextDocumentSyncOptions         textDocumentSync;
     NotebookDocumentSyncOptions     notebookDocumentSync;
     CompletionOptions               completionProvider;
@@ -175,7 +175,7 @@ struct InitializeParams : public WorkDoneProgressParams {
     InitializationOptions initializationOptions;
 
     ClientCapabilities           capabilities;
-    std::string                  trace{"off"};  // 'off' | 'messages' | 'verbose'
+    std::string                  trace{"off"}; // 'off' | 'messages' | 'verbose'
     std::vector<WorkspaceFolder> workspaceFolders;
 };
 
@@ -204,11 +204,11 @@ struct UnregistrationParams : public Protocol {
 };
 
 struct SetTraceParams : public Protocol {
-    std::string value;  // 'off' | 'messages' | 'verbose'
+    std::string value; // 'off' | 'messages' | 'verbose'
 };
 
 struct LogTraceParams : public Protocol {
     std::string message;
     std::string verbose;
 };
-}  // namespace domain::model
+} // namespace domain::model
