@@ -6,7 +6,6 @@
 #include <optional>
 #include <string>
 #include <variant>
-#include <vector>
 
 namespace domain::model {
 struct Protocol {
@@ -26,8 +25,6 @@ struct RegularExpressionsClientCapabilities : public Protocol {
     std::string                engine;
     std::optional<std::string> version;
 };
-
-const std::vector<std::string> EOL{"\n", "\r\n", "\r"};
 
 struct Position : public Protocol {
     Position() = default;
@@ -88,7 +85,7 @@ struct TextDocumentItem : public Protocol {
     }
 
     std::string  uri;
-    std::string  languageId; // dot
+    std::string  languageId;  // dot
     std::int64_t version;
     std::string  text;
 };
@@ -118,9 +115,9 @@ struct TextDocumentPositionParams : public Protocol {
 };
 
 struct DocumentFilter : public Protocol {
-    std::string language; // A language id, like `typescript`.
-    std::string scheme;   // A Uri scheme, like `file` or `untitled`.
-    std::string pattern;  // A glob pattern, like `*.{ts,js}`.
+    std::string language;  // A language id, like `typescript`.
+    std::string scheme;    // A Uri scheme, like `file` or `untitled`.
+    std::string pattern;   // A glob pattern, like `*.{ts,js}`.
 };
 
 struct TextEdit : public Protocol {
@@ -220,30 +217,30 @@ struct PartialResultParams : public Protocol {
 };
 
 enum class CompletionItemKind {
-    Text = 1,
-    Method = 2,
-    Function = 3,
-    Constructor = 4,
-    Field = 5,
-    Variable = 6,
-    Class = 7,
-    Interface = 8,
-    Module = 9,
-    Property = 10,
-    Unit = 11,
-    Value = 12,
-    Enum = 13,
-    Keyword = 14,
-    Snippet = 15,
-    Color = 16,
-    File = 17,
-    Reference = 18,
-    Folder = 19,
-    EnumMember = 20,
-    Constant = 21,
-    Struct = 22,
-    Event = 23,
-    Operator = 24,
+    Text          = 1,
+    Method        = 2,
+    Function      = 3,
+    Constructor   = 4,
+    Field         = 5,
+    Variable      = 6,
+    Class         = 7,
+    Interface     = 8,
+    Module        = 9,
+    Property      = 10,
+    Unit          = 11,
+    Value         = 12,
+    Enum          = 13,
+    Keyword       = 14,
+    Snippet       = 15,
+    Color         = 16,
+    File          = 17,
+    Reference     = 18,
+    Folder        = 19,
+    EnumMember    = 20,
+    Constant      = 21,
+    Struct        = 22,
+    Event         = 23,
+    Operator      = 24,
     TypeParameter = 25
 };
 
@@ -288,4 +285,4 @@ struct CompletionOptions : public WorkDoneProgressOptions {
     bool                     resolveProvider;
     CompletionItem           completionItem;
 };
-} // namespace domain::model
+}  // namespace domain::model
