@@ -90,14 +90,14 @@ private:
     auto read() -> boost::cobalt::promise<bool> {
         auto message = session_->Read();
 
-        uranus::utils::LogHelper::Instance().Info("resolve message length: {} data: {}\n", message);
+        uranus::utils::LogHelper::Instance().Info("resolve message data: {}\n", message);
 
         // 解析数据
         auto success = request_.Parse(message.get());
         co_return success;
     }
 
-    auto dispatch(std::string_view method, const nlohmann::json params) -> boost::cobalt::task<void> {
+    auto dispatch(std::string_view method, const nlohmann::json &params) -> boost::cobalt::task<void> {
         if (const auto handler = handler_.find(method.data()); handler != handler_.end()) {
             auto result = handler->second(params);
             response_.AddResult(result.Encode());

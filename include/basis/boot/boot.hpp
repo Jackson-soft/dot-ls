@@ -2,7 +2,6 @@
 
 #include "utils/log.hpp"
 
-#include <cstdlib>
 #include <filesystem>
 
 namespace basic::boot {
