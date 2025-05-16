@@ -3,51 +3,49 @@
 // 用户界面层
 
 #include "app/app.hpp"
-#include "domain/entity/session.hpp"
 #include "domain/model/basic.hpp"
+#include "domain/model/flag.hpp"
 #include "jsonrpc/request.hpp"
 #include "jsonrpc/response.hpp"
-#include "utils/log.hpp"
 
-#include <array>
-#include <boost/asio/detached.hpp>
-#include <boost/asio/io_context.hpp>
-#include <boost/asio/strand.hpp>
-#include <boost/asio/this_coro.hpp>
-#include <boost/asio/thread_pool.hpp>
-#include <boost/cobalt.hpp>
-#include <boost/cobalt/promise.hpp>
-#include <boost/cobalt/spawn.hpp>
-#include <boost/cobalt/task.hpp>
+#include <boost/asio.hpp>
+#include <boost/asio/read.hpp>
+#include <boost/asio/use_awaitable.hpp>
+#include <boost/beast/core/buffers_to_string.hpp>
+#include <boost/beast/core/flat_buffer.hpp>
+#include <boost/pool/object_pool.hpp>
 #include <functional>
 #include <memory>
 #include <nlohmann/json.hpp>
+#include <string>
 #include <unordered_map>
 #include <utility>
 
 namespace server {
 class Server {
 public:
-    explicit Server(std::shared_ptr<domain::entity::Session> session)
-        : session_(std::move(session)), app_(std::make_shared<app::App>()) {
+    explicit Server(boost::asio::io_context &ioCtx)
+        : stdin_(ioCtx, ::dup(STDIN_FILENO)), stdout_(ioCtx, ::dup(STDOUT_FILENO)) {
         enroll();
     }
 
-    ~Server() = default;
+    ~Server() {
+        Close();
+    }
 
-    auto Run() -> boost::cobalt::task<void> {
+    auto Run() -> boost::asio::awaitable<void> {
         while (true) {
-            // 读取数据
-            if (const auto success = co_await read(); success) {
-                // 消息分发
-                co_await dispatch(request_.Method(), request_.Params());
+            auto body = co_await read();
+            if (!body.empty()) {
+                co_await dispatch(body);
             }
         }
     }
 
     void Close() {
-        session_->Close();
-        ioContext_.stop();
+        stdin_.close();
+        stdout_.close();
+        buffer_.clear();
     }
 
     auto Shutdown(const nlohmann::json &params) -> domain::model::Protocol {
@@ -77,43 +75,94 @@ private:
         handler_.emplace("exit", std::bind(&Server::Exit, this, std::placeholders::_1));
     }
 
-    auto run() -> boost::cobalt::task<void> {
-        while (true) {
-            // 读取数据
-            if (const auto success = co_await read(); success) {
-                // 消息分发
-                co_await dispatch(request_.Method(), request_.Params());
+    auto read() -> boost::asio::awaitable<std::string> {
+        // 一次性读取直到头部结束标记 "\r\n\r\n"
+        auto headerLen = co_await boost::asio::async_read_until(stdin_,
+                                                                buffer_,
+                                                                domain::model::Delimiter,
+                                                                boost::asio::use_awaitable);
+
+        // 解析头部
+        const std::string header = boost::beast::buffers_to_string(buffer_.data());
+
+        const std::size_t contentLen = doLength(header);
+        buffer_.consume(headerLen);  // 移除已处理的头部数据
+
+        // 读取消息体
+        if (contentLen > 0) {
+            if (buffer_.size() < contentLen) {
+                buffer_.reserve(contentLen);
+            }
+            // 精确读取指定长度内容
+            std::size_t readLen
+                = co_await stdin_.async_read_some(buffer_.prepare(contentLen), boost::asio::use_awaitable);
+
+            if (readLen != contentLen) {
+                co_return "";  // 读取长度不匹配
+            }
+
+            // 直接返回缓冲区视图
+            const std::string body = boost::beast::buffers_to_string(buffer_.data());
+
+            buffer_.consume(contentLen);
+
+            co_return body;
+        }
+
+        co_return "";
+    }
+
+    auto doLength(const std::string &header) -> std::size_t {
+        std::istringstream stream(header);
+        std::string        line;
+
+        while (std::getline(stream, line)) {
+            if (line.substr(0, 15) == domain::model::HeaderLen) {
+                std::string valueStr = line.substr(15);
+
+                // 去除可能的回车符
+                if (const size_t cr_pos = valueStr.find('\r'); cr_pos != std::string::npos)
+                    valueStr = valueStr.substr(0, cr_pos);
+
+                try {
+                    return std::stoul(valueStr);
+                } catch (...) {
+                    return 0;  // 无效长度
+                }
             }
         }
+        return 0;  // 未找到 Content-Length
     }
 
-    auto read() -> boost::cobalt::promise<bool> {
-        auto message = session_->Read();
-
-        uranus::utils::LogHelper::Instance().Info("resolve message data: {}\n", message);
-
+    auto dispatch(std::string &body) -> boost::asio::awaitable<void> {
         // 解析数据
-        auto success = request_.Parse(message.get());
-        co_return success;
-    }
+        auto request = request_.construct();
+        if (auto success = request->Parse(body); success) {
+            if (const auto handler = handler_.find(request->Method().data()); handler != handler_.end()) {
+                auto result = handler->second(request->Params());
 
-    auto dispatch(std::string_view method, const nlohmann::json &params) -> boost::cobalt::task<void> {
-        if (const auto handler = handler_.find(method.data()); handler != handler_.end()) {
-            auto result = handler->second(params);
-            response_.AddResult(result.Encode());
-            session_->Write(response_.LspString());
+                auto output = response_.construct(std::get<0>(request->Id()));
+                output->SetResult(result.Encode());
+                auto message = std::format("{}{}{}{}",
+                                           domain::model::HeaderLen,
+                                           output->String().size(),
+                                           domain::model::Delimiter,
+                                           output->String());
+                co_await boost::asio::async_write(stdout_, boost::asio::buffer(message), boost::asio::use_awaitable);
+                response_.destroy(output);
+            }
         }
 
-        co_return;
+        request_.destroy(request);
     }
 
-    std::shared_ptr<domain::entity::Session> session_;
-    std::shared_ptr<app::App>                app_;
-    boost::asio::io_context                  ioContext_{1};
-    std::unordered_map<std::string, std::function<domain::model::Protocol(const nlohmann::json &params)>>
-    handler_{};                            // 接口处理
-    std::array<char, 1024>    buffer_{};   // 数据
-    uranus::jsonrpc::Request  request_{};  // 请求
-    uranus::jsonrpc::Response response_{}; // 响应
+    boost::asio::posix::stream_descriptor stdin_;     // 标准输入
+    boost::asio::posix::stream_descriptor stdout_;    // 标准输出
+    boost::beast::flat_buffer             buffer_{};  // 可自动扩容的缓冲区
+    std::shared_ptr<app::App>             app_{std::make_shared<app::App>()};
+    std::unordered_map<std::string, std::function<domain::model::Protocol(const nlohmann::json &params)>> handler_{};
+    // 接口处理
+    boost::object_pool<uranus::jsonrpc::Request>  request_{};   // 请求池
+    boost::object_pool<uranus::jsonrpc::Response> response_{};  // 响应池
 };
-} // namespace server
+}  // namespace server

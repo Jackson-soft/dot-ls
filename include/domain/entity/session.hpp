@@ -1,13 +1,11 @@
 #pragma once
 
 #include "domain/model/flag.hpp"
-#include "utils/log.hpp"
 
 #include <boost/asio.hpp>
 #include <boost/asio/posix/stream_descriptor.hpp>
 #include <boost/beast/core/buffers_to_string.hpp>
 #include <boost/beast/core/flat_buffer.hpp>
-#include <boost/cobalt.hpp>
 #include <cstddef>
 #include <format>
 #include <iostream>
@@ -20,8 +18,8 @@ public:
 
     virtual ~Session() = default;
 
-    virtual auto Read() -> boost::cobalt::generator<std::string> = 0;
-    virtual auto Write(const std::string &response) -> boost::cobalt::promise<void> = 0;
+    virtual auto Read() -> boost::asio::awaitable<void> = 0;
+    virtual auto Write(const std::string &response) -> boost::asio::awaitable<void> = 0;
     virtual void Close() = 0;
 };
 
@@ -31,7 +29,10 @@ public:
     explicit IOSession(boost::asio::io_context ioCtx)
         : stdin_(ioCtx, ::dup(STDIN_FILENO)), stdout_(ioCtx, ::dup(STDOUT_FILENO)) {}
 
-    ~IOSession() override = default;
+    ~IOSession() override {
+        Close();
+        buffer_.clear();
+    }
 
     /*
     Content-Length: ...\r\n\r\n
@@ -44,61 +45,63 @@ public:
         }
     }
     */
-    auto Read() -> boost::cobalt::generator<std::string> override {
-        boost::beast::flat_buffer buffer; // 可自动扩容的缓冲区
+    auto Read() -> boost::asio::awaitable<void> override {
+        // 一次性读取直到头部结束标记 "\r\n\r\n"
+        std::size_t headerLen = co_await boost::asio::async_read_until(
+            stdin_,
+            buffer_,
+            domain::model::Delimiter,
+            boost::asio::use_awaitable);
 
-        while (true) {
-            // 一次性读取直到头部结束标记 "\r\n\r\n"
-            const size_t headerLen = co_await boost::asio::async_read_until(
-                stdin_,
-                buffer,
-                "\r\n\r\n",
-                boost::cobalt::use_op);
+        // 解析头部
+        const std::string header = boost::beast::buffers_to_string(buffer_.data());
 
-            // 解析头部
-            std::string header{static_cast<const char *>(buffer.data().data()), headerLen};
+        const std::size_t contentLen = doLength(header);
+        buffer_.consume(headerLen); // 移除已处理的头部数据
 
-            const std::size_t contentLen = doLength(header);
-            buffer.consume(headerLen); // 移除已处理的头部数据
-
-            // 读取消息体
-            if (contentLen > 0) {
-                if (buffer.size() < contentLen) {
-                    buffer.reserve(contentLen);
-                }
-                // 精确读取指定长度内容
-                const size_t readLen = co_await boost::asio::async_read(stdin_,
-                                                                        buffer.prepare(contentLen - buffer.size()),
-                                                                        boost::asio::transfer_exactly(
-                                                                            contentLen - buffer.size()),
-                                                                        boost::cobalt::use_op);
-
-                if (readLen != contentLen) {
-                    throw std::runtime_error("Incomplete body read");
-                }
-                buffer.commit(readLen);
-
-                // 直接返回缓冲区视图
-                std::string_view bodyView{
-                    static_cast<const char *>(buffer.data().data()),
-                    contentLen
-                };
-                co_yield bodyView;
-
-                buffer.consume(contentLen);
+        // 读取消息体
+        if (contentLen > 0) {
+            if (buffer_.size() < contentLen) {
+                buffer_.reserve(contentLen);
             }
+            // 精确读取指定长度内容
+            auto readLen = co_await boost::asio::async_read(stdin_,
+                                                            buffer_,
+                                                            boost::asio::transfer_exactly(contentLen),
+                                                            boost::asio::use_awaitable);
+
+            if (readLen != contentLen) {
+                throw std::runtime_error("Incomplete body read");
+            }
+
+            // 直接返回缓冲区视图
+            std::string body = boost::beast::buffers_to_string(buffer_.data());
+
+            buffer_.consume(contentLen);
+
+            co_return body;
         }
     }
 
-    auto Write(const std::string &response) -> boost::cobalt::promise<void> override {
-        auto message = std::format("{}{}{}", domain::model::HeaderLen, response.size(), domain::model::Delimiter);
-        co_await boost::asio::async_write(stdout_, boost::asio::buffer(message), boost::cobalt::use_op);
+
+    auto Write(const std::string &response) -> boost::asio::awaitable<void> override {
+        auto message = std::format("{}{}{}{}",
+                                   domain::model::HeaderLen,
+                                   response.size(),
+                                   domain::model::Delimiter,
+                                   response);
+        co_await boost::asio::async_write(stdout_,
+                                          boost::asio::buffer(message),
+                                          boost::asio::use_awaitable);
     }
 
-    void Close() override {}
+    void Close() override {
+        stdin_.close();
+        stdout_.close();
+    }
 
 private:
-    auto doLength(const std::string &header) -> std::size_t {
+    static auto doLength(const std::string &header) -> std::size_t {
         std::istringstream stream(header);
         std::string        line;
 
@@ -107,9 +110,8 @@ private:
                 std::string valueStr = line.substr(15);
 
                 // 去除可能的回车符
-                const size_t cr_pos = valueStr.find('\r');
-                if (cr_pos != std::string::npos)
-                    valueStr = valueStr.substr(0, cr_pos);
+                if (const size_t cr_pos = valueStr.find('\r'); cr_pos != std::string::npos)
+                    valueStr            = valueStr.substr(0, cr_pos);
 
                 try {
                     return std::stoul(valueStr);
@@ -121,7 +123,8 @@ private:
         return 0; // 未找到 Content-Length
     }
 
-    boost::asio::posix::stream_descriptor stdin_;  // 标准输入
-    boost::asio::posix::stream_descriptor stdout_; // 标准输出
+    boost::asio::posix::stream_descriptor stdin_;    // 标准输入
+    boost::asio::posix::stream_descriptor stdout_;   // 标准输出
+    boost::beast::flat_buffer             buffer_{}; // 可自动扩容的缓冲区
 };
 } // namespace domain::entity
