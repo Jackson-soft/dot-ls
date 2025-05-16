@@ -1,12 +1,11 @@
 #include "basis/boot/boot.hpp"
 #include "server/server.hpp"
 
-
+#include <boost/asio/co_spawn.hpp>
+#include <boost/asio/detached.hpp>
 #include <boost/program_options/options_description.hpp>
 #include <boost/program_options/parsers.hpp>
 #include <boost/program_options/variables_map.hpp>
-#include <boost/asio/co_spawn.hpp>
-#include <boost/asio/detached.hpp>
 #include <cstdlib>
 #include <iostream>
 #include <print>
@@ -38,16 +37,15 @@ auto main(int argc, char **argv) -> int {
         std::print("{}\n", basic::boot::Version);
         return EXIT_SUCCESS;
     }
-
-    SET_BINARY_MODE();
-
     /*
-    if (!basic::boot::Boot()) {
-        return EXIT_FAILURE;
-    }
-    */
+        SET_BINARY_MODE();
 
-    uranus::utils::LogHelper::Instance().Info("server start");
+        if (!basic::boot::Boot()) {
+            return EXIT_FAILURE;
+        }
+
+        uranus::utils::LogHelper::Instance().Info("server start");
+    */
 
     boost::asio::io_context io;
 
