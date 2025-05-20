@@ -181,7 +181,15 @@ struct TextDocumentContentChangeEvent : public Protocol {
 };
 
 struct WorkDoneProgressOptions : public Protocol {
-    std::optional<bool> workDoneProgress;
+    auto Encode() -> nlohmann::json override {
+        auto output = nlohmann::json::object();
+
+        output["workDoneProgress"] = workDoneProgress;
+
+        return output;
+    }
+
+    bool workDoneProgress{false};
 };
 
 using ProgressToken = std::variant<int, std::string>;
@@ -280,9 +288,20 @@ struct CompletionItem : public Protocol {
 };
 
 struct CompletionOptions : public WorkDoneProgressOptions {
+    auto Encode() -> nlohmann::json override {
+        auto output = nlohmann::json::object();
+
+        output["triggerCharacters"]   = triggerCharacters;
+        output["allCommitCharacters"] = allCommitCharacters;
+        output["resolveProvider"]     = resolveProvider;
+        output["completionItem"]      = completionItem.Encode();
+
+        return output;
+    }
+
     std::vector<std::string> triggerCharacters;
     std::vector<std::string> allCommitCharacters;
-    bool                     resolveProvider;
+    bool                     resolveProvider{false};
     CompletionItem           completionItem;
 };
 }  // namespace domain::model

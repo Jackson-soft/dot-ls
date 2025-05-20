@@ -6,9 +6,16 @@
 #include <vector>
 
 namespace domain::model {
-enum class TextDocumentSyncKind { None = 0, Full = 1, Incremental = 2 };
+enum class TextDocumentSyncKind : int { None = 0, Full = 1, Incremental = 2 };
 
 struct TextDocumentSyncOptions : public Protocol {
+    auto Encode() -> nlohmann::json override {
+        auto output         = nlohmann::json::object();
+        output["openClose"] = openClose;
+        output["change"]    = static_cast<int>(change);
+        return output;
+    }
+
     bool                 openClose = false;
     TextDocumentSyncKind change    = TextDocumentSyncKind::None;
 };
