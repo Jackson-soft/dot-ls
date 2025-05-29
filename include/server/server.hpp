@@ -7,7 +7,6 @@
 #include "domain/model/flag.hpp"
 #include "jsonrpc/request.hpp"
 #include "jsonrpc/response.hpp"
-#include "utils/log.hpp"
 
 #include <boost/asio.hpp>
 #include <boost/asio/read.hpp>
