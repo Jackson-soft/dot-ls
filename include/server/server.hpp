@@ -9,10 +9,10 @@
 #include "jsonrpc/response.hpp"
 
 #include <boost/asio.hpp>
-#include <boost/asio/read.hpp>
 #include <boost/asio/use_awaitable.hpp>
 #include <boost/beast/core/buffers_to_string.hpp>
 #include <boost/beast/core/flat_buffer.hpp>
+#include <boost/cobalt.hpp>
 #include <boost/pool/object_pool.hpp>
 #include <format>
 #include <functional>
@@ -26,7 +26,7 @@ namespace server {
 class Server {
 public:
     explicit Server(boost::asio::io_context &ioCtx)
-        : stdin_(ioCtx, ::dup(STDIN_FILENO)), stdout_(ioCtx, ::dup(STDOUT_FILENO)) {
+        : ioCtx_(ioCtx), stdin_(ioCtx, ::dup(STDIN_FILENO)), stdout_(ioCtx, ::dup(STDOUT_FILENO)) {
         enroll();
     }
 
@@ -34,10 +34,9 @@ public:
         Close();
     }
 
-    auto Run() -> boost::asio::awaitable<void> {
+    auto Run() -> boost::cobalt::task<void> {
         while (true) {
-            auto body = co_await read();
-            if (!body.empty()) {
+            if (auto body = co_await read(); !body.empty()) {
                 co_await dispatch(body);
             }
         }
@@ -46,7 +45,6 @@ public:
     void Close() {
         stdin_.close();
         stdout_.close();
-        buffer_.clear();
     }
 
     auto Shutdown(const nlohmann::json &params) -> domain::model::Protocol {
@@ -76,66 +74,38 @@ private:
         handler_.emplace("exit", std::bind(&Server::Exit, this, std::placeholders::_1));
     }
 
-    auto read() -> boost::asio::awaitable<std::string> {
-        // 一次性读取直到头部结束标记 "\r\n\r\n"
-        auto headerLen = co_await boost::asio::async_read_until(stdin_,
-                                                                buffer_,
-                                                                domain::model::Delimiter,
-                                                                boost::asio::use_awaitable);
+    auto read() -> boost::cobalt::task<std::string> {
+        std::string line;
+        while (true) {
+            // 一次性读取直到头部结束标记 "\r\n\r\n"
+            co_await boost::asio::async_read_until(stdin_, buffer_, domain::model::Delimiter, boost::cobalt::use_task);
 
-        // 解析头部
-        const std::string header = boost::beast::buffers_to_string(buffer_.data());
+            // 解析头部
+            std::istream is(&buffer_);
+            std::string  header;
+            std::getline(is, header);
 
-        const std::size_t contentLen = doLength(header);
-        buffer_.consume(headerLen);  // 移除已处理的头部数据
+            if (header.starts_with(domain::model::HeaderLen)) {
+                const std::size_t length = std::stoul(header.substr(16));
 
-        // 读取消息体
-        if (contentLen > 0) {
-            if (buffer_.size() < contentLen) {
-                buffer_.reserve(contentLen);
-            }
-            // 精确读取指定长度内容
-            std::size_t readLen
-                = co_await stdin_.async_read_some(buffer_.prepare(contentLen), boost::asio::use_awaitable);
+                // 读取消息体
+                std::string content(length, '\0');
+                // 精确读取指定长度内容
+                const std::size_t readLen
+                    = co_await boost::asio::async_read(stdin_,
+                                                       boost::asio::buffer(content.data(), length),
+                                                       boost::cobalt::use_task);
 
-            if (readLen != contentLen) {
-                co_return "";  // 读取长度不匹配
-            }
-
-            // 直接返回缓冲区视图
-            const std::string body = boost::beast::buffers_to_string(buffer_.data());
-
-            buffer_.consume(contentLen);
-
-            co_return body;
-        }
-
-        co_return "";
-    }
-
-    auto doLength(const std::string &header) -> std::size_t {
-        std::istringstream stream(header);
-        std::string        line;
-
-        while (std::getline(stream, line)) {
-            if (line.substr(0, 15) == domain::model::HeaderLen) {
-                std::string valueStr = line.substr(15);
-
-                // 去除可能的回车符
-                if (const size_t cr_pos = valueStr.find('\r'); cr_pos != std::string::npos)
-                    valueStr = valueStr.substr(0, cr_pos);
-
-                try {
-                    return std::stoul(valueStr);
-                } catch (...) {
-                    return 0;  // 无效长度
+                if (readLen != length) {
+                    co_return "";  // 读取长度不匹配
                 }
+
+                co_return content;
             }
         }
-        return 0;  // 未找到 Content-Length
     }
 
-    auto dispatch(std::string &body) -> boost::asio::awaitable<void> {
+    auto dispatch(const std::string &body) -> boost::cobalt::task<void> {
         // 解析数据
         auto request = request_.construct();
         if (auto success = request->Parse(body); success) {
@@ -149,7 +119,7 @@ private:
                                            output->String().size(),
                                            domain::model::Delimiter,
                                            output->String());
-                co_await boost::asio::async_write(stdout_, boost::asio::buffer(message), boost::asio::use_awaitable);
+                co_await boost::asio::async_write(stdout_, boost::asio::buffer(message), boost::cobalt::use_task);
                 response_.destroy(output);
             }
         }
@@ -157,9 +127,10 @@ private:
         request_.destroy(request);
     }
 
+    boost::asio::io_context              &ioCtx_;
     boost::asio::posix::stream_descriptor stdin_;     // 标准输入
     boost::asio::posix::stream_descriptor stdout_;    // 标准输出
-    boost::beast::flat_buffer             buffer_{};  // 可自动扩容的缓冲区
+    boost::asio::streambuf                buffer_{};  // 可自动扩容的缓冲区
     std::shared_ptr<app::App>             app_{std::make_shared<app::App>()};
     std::unordered_map<std::string, std::function<domain::model::Protocol(const nlohmann::json &params)>> handler_{};
     // 接口处理
