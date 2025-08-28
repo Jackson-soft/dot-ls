@@ -3,6 +3,7 @@
 
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
+#include <boost/cobalt.hpp>
 #include <boost/program_options/options_description.hpp>
 #include <boost/program_options/parsers.hpp>
 #include <boost/program_options/variables_map.hpp>
@@ -21,7 +22,7 @@
 #define SET_BINARY_MODE() (void)0
 #endif
 
-auto main(int argc, char **argv) -> int {
+boost::cobalt::main co_main(int argc, char **argv) {
     boost::program_options::options_description desc("Allowed options");
     desc.add_options()("help,h", "produce a help message")("version,v", "print version string");
 
@@ -31,29 +32,27 @@ auto main(int argc, char **argv) -> int {
 
     if (vm.contains("help")) {
         std::cout << desc << '\n';
-        return EXIT_SUCCESS;
+        co_return EXIT_SUCCESS;
     }
     if (vm.contains("version")) {
         std::print("{}\n", basic::boot::Version);
-        return EXIT_SUCCESS;
+        co_return EXIT_SUCCESS;
     }
+
+    SET_BINARY_MODE();
     /*
-        SET_BINARY_MODE();
+            if (!basic::boot::Boot()) {
+                return EXIT_FAILURE;
+            }
 
-        if (!basic::boot::Boot()) {
-            return EXIT_FAILURE;
-        }
-
-        uranus::utils::LogHelper::Instance().Info("server start");
-    */
+            uranus::utils::LogHelper::Instance().Info("server start");
+        */
 
     boost::asio::io_context io;
 
     server::Server server(io);
 
-    boost::asio::co_spawn(io, server.Run(), boost::asio::detached);
+    co_await server.Run();
 
-    io.run();
-
-    return EXIT_SUCCESS;
+    co_return EXIT_SUCCESS;
 }
