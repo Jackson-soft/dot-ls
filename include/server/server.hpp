@@ -9,15 +9,13 @@
 #include "jsonrpc/response.hpp"
 
 #include <boost/asio.hpp>
-#include <boost/asio/use_awaitable.hpp>
-#include <boost/beast/core/buffers_to_string.hpp>
-#include <boost/beast/core/flat_buffer.hpp>
 #include <boost/cobalt.hpp>
 #include <boost/pool/object_pool.hpp>
 #include <format>
 #include <functional>
 #include <memory>
 #include <nlohmann/json.hpp>
+#include <print>
 #include <string>
 #include <unordered_map>
 #include <utility>
@@ -35,6 +33,7 @@ public:
     }
 
     auto Run() -> boost::cobalt::task<void> {
+        std::print("server::Run()\n");
         while (true) {
             if (auto message = co_await read(); !message.empty()) {
                 co_await dispatch(message);
@@ -104,6 +103,8 @@ private:
             std::istream is(&buffer_);
             std::string  header;
             std::getline(is, header);
+
+            std::print("header: {}\n", header);
 
             if (!header.empty() && header.back() == '\r') {
                 header.pop_back();  // 移除换行符

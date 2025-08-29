@@ -1,374 +1,204 @@
 local json = require("cjson")
+local io = io
+local os = os
+local tonumber = tonumber
+local tostring = tostring
+local time = os.time
+local date = os.date
 
--- LSP 测试客户端
-local LSPClient = {}
-LSPClient.__index = LSPClient
-
-function LSPClient.new(server_path)
-    local self = setmetatable({}, LSPClient)
-    self.message_id = 0
-    local current_dir = io.popen("pwd"):read("*l")
-    self.server_path = server_path or (current_dir .. "/../build/Debug/dot-ls")
-    self.responses = {}
-    return self
+local function log(level, msg)
+    io.write(string.format("[%s] %s: %s\n", date("%H:%M:%S"), level, msg))
+    io.flush()
 end
 
-function LSPClient:next_id()
-    self.message_id = self.message_id + 1
-    return self.message_id
+local function pretty_json(s)
+    local ok, tbl = pcall(json.decode, s)
+    if ok then
+        -- cjson does not pretty print; produce compact stable string
+        return json.encode(tbl)
+    end
+    return s
 end
 
-function LSPClient:log(level, message)
-    local timestamp = os.date("%H:%M:%S")
-    print(string.format("[%s] %s: %s", timestamp, level, message))
+-- create unique fifo paths
+local pid = tostring(os.getpid and os.getpid() or math.random(10000))
+local in_fifo = "/tmp/lsp_in_" .. pid
+local out_fifo = "/tmp/lsp_out_" .. pid
+
+os.execute("mkfifo " .. in_fifo .. " 2>/dev/null")
+os.execute("mkfifo " .. out_fifo .. " 2>/dev/null")
+
+-- change this to your running server binary if you need to restart it here
+local server_path = arg[1] or "../build/Debug/dot-ls"
+
+-- start server redirecting stdio to fifos, get pid
+local start_cmd = string.format("(%s < %s > %s 2>&1) & echo $!", server_path, in_fifo, out_fifo)
+local ph = io.popen(start_cmd)
+local server_pid = ph:read("*l")
+ph:close()
+log("INFO", "Started server pid=" .. (server_pid or "unknown"))
+
+-- open pipes
+local in_fd = io.open(in_fifo, "w")
+if not in_fd then
+    log("ERROR", "failed to open input fifo: " .. in_fifo)
+    os.exit(1)
 end
 
-function LSPClient:send_message(process, message)
-    local message_json = json.encode(message)
-    local content_length = string.len(message_json)
+-- open output fifo for reading (blocking read)
+local out_fd = io.open(out_fifo, "r")
+if not out_fd then
+    log("ERROR", "failed to open output fifo: " .. out_fifo)
+    in_fd:close()
+    os.exit(1)
+end
 
-    local header = "Content-Length: " .. content_length .. "\r\n\r\n"
-    local full_message = header .. message_json
+local function send_message(tbl)
+    local j = json.encode(tbl)
+    local header = "Content-Length: " .. #j .. "\r\n\r\n"
+    local full = header .. j
+    in_fd:write(full)
+    in_fd:flush()
 
-    process:write(full_message)
-    process:flush()
+    -- print request to stdout
+    print("\n----- REQUEST -----")
+    io.write("Content-Length: " .. #j .. "\n")
+    print(pretty_json(j))
+    io.flush()
+end
 
-    if message.method then
-        if message.id then
-            self:log("SEND", string.format("Request: %s (ID: %s)", message.method, message.id))
+local function read_response(timeout_seconds)
+    timeout_seconds = timeout_seconds or 5
+    local start = time()
+    -- read headers
+    local content_len = nil
+    while true do
+        if (time() - start) > timeout_seconds then
+            return nil, "timeout"
+        end
+        local line = out_fd:read("*l")
+        if not line then
+            -- no data yet; small sleep then continue
+            os.execute("sleep 0.05")
+            goto continue
+        end
+        ::continue::
+        if not line then
+            -- try again
         else
-            self:log("SEND", string.format("Notification: %s", message.method))
-        end
-    end
-    self:log("DEBUG", "Message: " .. message_json)
-
-    -- 输出原始消息到 stderr，这样可以同时看到发送和接收的内容
-    io.stderr:write("CLIENT_MSG: " .. full_message .. "\n")
-    io.stderr:flush()
-end
-
-function LSPClient:send_request(process, method, params)
-    local request = {
-        jsonrpc = "2.0",
-        id = self:next_id(),
-        method = method,
-        params = params or {}
-    }
-
-    self:send_message(process, request)
-    return request.id
-end
-
-function LSPClient:send_notification(process, method, params)
-    local notification = {
-        jsonrpc = "2.0",
-        method = method,
-        params = params or {}
-    }
-
-    self:send_message(process, notification)
-end
-
-function LSPClient:read_response_from_stdout()
-    -- 读取服务端标准输出的响应
-    local line = io.read("*line")
-    if not line then
-        return nil
-    end
-
-    -- 查找 Content-Length 头
-    local content_length = 0
-    while line do
-        if line:match("^Content%-Length:%s*(%d+)") then
-            content_length = tonumber(line:match("^Content%-Length:%s*(%d+)"))
-            break
-        end
-        line = io.read("*line")
-        if not line then return nil end
-    end
-
-    if content_length == 0 then
-        return nil
-    end
-
-    -- 跳过空行
-    io.read("*line")
-
-    -- 读取消息体
-    local response = io.read(content_length)
-    if response then
-        self:log("RECV", "Response received")
-        self:log("DEBUG", "Response: " .. response)
-
-        -- 尝试解析 JSON 并显示格式化信息
-        local success, parsed = pcall(json.decode, response)
-        if success then
-            if parsed.id then
-                self:log("RECV", string.format("Response ID: %s", parsed.id))
-            end
-            if parsed.method then
-                self:log("RECV", string.format("Notification: %s", parsed.method))
-            end
-            if parsed.error then
-                self:log("ERROR", string.format("Error: %s", parsed.error.message or "Unknown error"))
+            -- strip trailing CR if present
+            line = line:gsub("\r$", "")
+            if line == "" then
+                -- blank line -> headers finished
+                if content_len then break end
+            else
+                local v = line:match("^Content%-Length:%s*(%d+)")
+                if v then content_len = tonumber(v) end
             end
         end
     end
 
-    return response
+    if not content_len or content_len <= 0 then
+        return nil, "no-content"
+    end
+
+    -- read body exactly content_len bytes
+    local body = out_fd:read(content_len)
+    if not body then
+        return nil, "eof"
+    end
+
+    -- print response to stdout
+    print("\n----- RESPONSE -----")
+    io.write("Content-Length: " .. tostring(content_len) .. "\n")
+    print(pretty_json(body))
+    io.flush()
+
+    local ok, parsed = pcall(json.decode, body)
+    if ok then return parsed end
+    return body
 end
 
-function LSPClient:wait_for_response(process)
-    -- 简单的等待实现，实际项目中应该使用更复杂的响应处理
-    os.execute("sleep 0.5")
-
-    -- 尝试读取响应（非阻塞）
-    local response = self:read_response_from_stdout()
-    if response then
-        return response
-    end
-end
-
-function LSPClient:run_test_sequence()
-    self:log("INFO", "Starting LSP server test sequence...")
-
-    -- 启动 LSP 服务器进程（使用双向管道）
-    local server_cmd = self.server_path
-    self:log("INFO", "Starting server: " .. server_cmd)
-
-    -- 创建临时文件用于双向通信
-    local temp_input = os.tmpname()
-    local temp_output = os.tmpname()
-
-    -- 创建命名管道用于双向通信
-    os.execute("mkfifo " .. temp_input .. " 2>/dev/null")
-    os.execute("mkfifo " .. temp_output .. " 2>/dev/null")
-
-    -- 在后台启动服务器，重定向输入输出
-    local server_pid_cmd = string.format("(%s < %s > %s 2>&1) & echo $!", server_cmd, temp_input, temp_output)
-    local pid_handle = io.popen(server_pid_cmd)
-    local server_pid = pid_handle:read("*line")
-    pid_handle:close()
-
-    self:log("INFO", "Server started with PID: " .. (server_pid or "unknown"))
-
-    -- 打开写入管道
-    local lsp_server = io.open(temp_input, "w")
-    if not lsp_server then
-        self:log("ERROR", "Failed to open input pipe")
-        return false
-    end
-
-    -- 打开读取管道（非阻塞）
-    local function read_server_output()
-        local output_file = io.open(temp_output, "r")
-        if output_file then
-            local content = output_file:read("*all")
-            output_file:close()
-            if content and content ~= "" then
-                self:log("RECV", "Server output:")
-                print(content)
-            end
-        end
-    end
-
-    -- 等待服务器启动
-    os.execute("sleep 1")
-
-    -- 1. 发送初始化请求
-    self:log("INFO", "--- Test 1: Initialize ---")
-    local init_id = self:send_request(lsp_server, "initialize", {
-        processId = 12345,
-        rootUri = "file:///Users/yalla/code/cpp/dot-ls",
-        locale = "en",
-        capabilities = {
-            textDocument = {
-                synchronization = {
-                    dynamicRegistration = true,
-                    willSave = true,
-                    willSaveWaitUntil = true,
-                    didSave = true
-                },
-                completion = {
-                    dynamicRegistration = true,
-                    completionItem = {
-                        snippetSupport = true,
-                        documentationFormat = { "markdown", "plaintext" }
-                    }
-                },
-                hover = {
-                    dynamicRegistration = true,
-                    contentFormat = { "markdown", "plaintext" }
-                },
-                definition = {
-                    dynamicRegistration = true
-                }
-            },
-            workspace = {
-                workspaceFolders = true,
-                configuration = true
-            }
-        },
-        trace = "verbose",
-        workspaceFolders = {
-            {
-                uri = "file:///Users/yalla/code/cpp/dot-ls",
-                name = "dot-ls"
-            }
-        }
-    })
-
-    self:wait_for_response(lsp_server)
-    read_server_output()
-
-    -- 2. 发送 initialized 通知
-    self:log("INFO", "--- Test 2: Initialized ---")
-    self:send_notification(lsp_server, "initialized", {})
-
-    self:wait_for_response(lsp_server)
-    read_server_output()
-
-    -- 3. 发送 textDocument/didOpen 通知
-    self:log("INFO", "--- Test 3: Document Open ---")
-    local test_document = {
-        uri = "file:///Users/yalla/code/cpp/dot-ls/test/graph.dot",
-        languageId = "dot",
-        version = 1,
-        text = [[digraph G {
-    rankdir=LR;
-    node [shape=box];
-
-    A -> B [label="edge1"];
-    B -> C [label="edge2"];
-    C -> A [label="edge3"];
-
-    subgraph cluster_0 {
-        label="Cluster";
-        D -> E;
-    }
-}]]
-    }
-
-    self:send_notification(lsp_server, "textDocument/didOpen", {
-        textDocument = test_document
-    })
-
-    self:wait_for_response(lsp_server)
-    read_server_output()
-
-    -- 4. 发送 textDocument/completion 请求
-    self:log("INFO", "--- Test 4: Completion ---")
-    self:send_request(lsp_server, "textDocument/completion", {
-        textDocument = {
-            uri = test_document.uri
-        },
-        position = {
-            line = 5,
-            character = 8
-        },
-        context = {
-            triggerKind = 1
-        }
-    })
-
-    self:wait_for_response(lsp_server)
-    read_server_output()
-
-    -- 5. 发送 textDocument/hover 请求
-    self:log("INFO", "--- Test 5: Hover ---")
-    self:send_request(lsp_server, "textDocument/hover", {
-        textDocument = {
-            uri = test_document.uri
-        },
-        position = {
-            line = 4,
-            character = 4
-        }
-    })
-
-    self:wait_for_response(lsp_server)
-    read_server_output()
-
-    -- 6. 发送 textDocument/didChange 通知
-    self:log("INFO", "--- Test 6: Document Change ---")
-    self:send_notification(lsp_server, "textDocument/didChange", {
-        textDocument = {
-            uri = test_document.uri,
-            version = 2
-        },
-        contentChanges = {
-            {
-                range = {
-                    start = { line = 6, character = 0 },
-                    ["end"] = { line = 6, character = 0 }
-                },
-                text = "    F -> G;\n"
-            }
-        }
-    })
-
-    self:wait_for_response(lsp_server)
-    read_server_output()
-
-    -- 7. 发送 textDocument/didClose 通知
-    self:log("INFO", "--- Test 7: Document Close ---")
-    self:send_notification(lsp_server, "textDocument/didClose", {
-        textDocument = {
-            uri = test_document.uri
-        }
-    })
-
-    self:wait_for_response(lsp_server)
-    read_server_output()
-
-    -- 8. 发送 shutdown 请求
-    self:log("INFO", "--- Test 8: Shutdown ---")
-    self:send_request(lsp_server, "shutdown", {})
-
-    self:wait_for_response(lsp_server)
-    read_server_output()
-
-    -- 9. 发送 exit 通知
-    self:log("INFO", "--- Test 9: Exit ---")
-    self:send_notification(lsp_server, "exit")
-
-    -- 等待一会儿让服务器处理退出
-    os.execute("sleep 1")
-    read_server_output()
-
-    -- 关闭连接
-    lsp_server:close()
-
-    -- 清理临时文件
-    os.execute("rm -f " .. temp_input .. " " .. temp_output)
-
-    -- 确保服务器进程已终止
-    if server_pid then
-        os.execute("kill " .. server_pid .. " 2>/dev/null")
-    end
-
-    self:log("INFO", "Test sequence completed!")
-    return true
-end
-
--- 主函数
-function main()
-    local client = LSPClient.new()
-
-    print("=== DOT-LS LSP Server Test Client ===")
-    print("This client will test the LSP server functionality")
-    print("Press Ctrl+C to interrupt at any time")
-    print("")
-
-    local success = client:run_test_sequence()
-
-    if success then
-        print("\n✅ All tests completed successfully!")
+-- helper: send and wait (for requests expecting response)
+local function send_and_pair(tbl)
+    send_message(tbl)
+    local resp, err = read_response(5)
+    if not resp then
+        log("WARN", "no response or error: " .. tostring(err))
     else
-        print("\n❌ Tests failed!")
-        os.exit(1)
+        -- if parsed and has id, print pairing info
+        if type(resp) == "table" and resp.id then
+            log("PAIR", string.format("request id=%s <-> response id=%s", tostring(tbl.id or "-"), tostring(resp.id)))
+        end
     end
 end
 
--- 运行测试
-main()
+-- test sequence
+-- 1 initialize (expect response)
+local init = {
+    jsonrpc = "2.0",
+    id = 1,
+    method = "initialize",
+    params = {
+        processId = 12345,
+        rootUri = "file:///tmp",
+        capabilities = {}
+    }
+}
+send_and_pair(init)
+
+-- 2 initialized (notification, no response expected)
+local initialized = { jsonrpc = "2.0", method = "initialized", params = {} }
+send_message(initialized)
+-- small pause to allow server logs to appear
+os.execute("sleep 0.2")
+-- try to read any server unsolicited output (non-LSP) quickly
+local success, parsed = pcall(read_response, 0.1)
+if not success then end
+
+-- 3 didOpen (notification)
+local doc = [[digraph G { A -> B; }]]
+local didOpen = {
+    jsonrpc = "2.0",
+    method = "textDocument/didOpen",
+    params = {
+        textDocument = {
+            uri = "file:///tmp/test.dot",
+            languageId = "dot",
+            version = 1,
+            text = doc
+        }
+    }
+}
+send_message(didOpen)
+os.execute("sleep 0.2")
+
+-- 4 completion (expect response)
+local comp = {
+    jsonrpc = "2.0",
+    id = 2,
+    method = "textDocument/completion",
+    params = {
+        textDocument = { uri = "file:///tmp/test.dot" },
+        position = { line = 0, character = 5 }
+    }
+}
+send_and_pair(comp)
+
+-- 5 shutdown (expect response)
+local shutdown_req = { jsonrpc = "2.0", id = 3, method = "shutdown", params = {} }
+send_and_pair(shutdown_req)
+
+-- 6 exit (notification)
+local exit_n = { jsonrpc = "2.0", method = "exit" }
+send_message(exit_n)
+
+-- cleanup
+in_fd:close()
+out_fd:close()
+os.execute("rm -f " .. in_fifo .. " " .. out_fifo)
+if server_pid then
+    os.execute("kill " .. server_pid .. " 2>/dev/null")
+end
+
+log("INFO", "done")
