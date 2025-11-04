@@ -7,13 +7,13 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 if (CMAKE_SYSTEM_NAME STREQUAL "Darwin")
-    message(STATUS "Configuring on/for macOS")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fexperimental-library")
+        message(STATUS "Configuring on/for macOS")
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fexperimental-library")
 elseif (CMAKE_SYSTEM_NAME MATCHES "Windows")
-    target_compile_definitions(${PROJECT_NAME} PUBLIC -D_WIN32_WINNT=0x0601)
+        target_compile_definitions(${PROJECT_NAME} PUBLIC -D_WIN32_WINNT=0x0601)
 elseif (CMAKE_SYSTEM_NAME MATCHES "Linux")
-    # 设置编译器标志以启用静态链接
-    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -flto=auto -static-libgcc -static-libstdc++ -static -lpthread -lm")
+        # 设置编译器标志以启用静态链接
+        set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -flto=auto -static-libgcc -static-libstdc++ -static -lpthread -lm")
 endif ()
 
 find_package(Boost REQUIRED)

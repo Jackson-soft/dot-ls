@@ -1,4 +1,4 @@
-#include "basis/boot/boot.hpp"
+#include "infra/boot/boot.hpp"
 #include "server/server.hpp"
 
 #include <boost/asio/co_spawn.hpp>
@@ -40,13 +40,12 @@ boost::cobalt::main co_main(int argc, char **argv) {
     }
 
     SET_BINARY_MODE();
-    /*
-            if (!basic::boot::Boot()) {
-                return EXIT_FAILURE;
-            }
 
-            uranus::utils::LogHelper::Instance().Info("server start");
-        */
+    if (!basic::boot::Boot()) {
+        co_return EXIT_FAILURE;
+    }
+
+    uranus::utils::LogHelper::Instance().Info("server start");
 
     boost::asio::io_context io;
 

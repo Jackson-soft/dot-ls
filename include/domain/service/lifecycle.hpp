@@ -1,7 +1,7 @@
 #pragma once
 
-#include "basis/boot/flag.hpp"
 #include "domain/model/lifecycle.hpp"
+#include "infra/boot/flag.hpp"
 
 // 生命周期相关服务
 namespace domain::service {

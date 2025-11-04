@@ -29,6 +29,7 @@ inline auto Boot() -> bool {
 
     const auto logFile = logPath / std::filesystem::path{"rotating.log"};
     uranus::utils::LogHelper::Instance().Initialize(logFile);
+
     return true;
 }
-} // namespace basic::boot
+}  // namespace basic::boot

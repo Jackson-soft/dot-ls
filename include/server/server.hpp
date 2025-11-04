@@ -33,7 +33,6 @@ public:
     }
 
     auto Run() -> boost::cobalt::task<void> {
-        std::print("server::Run()\n");
         while (true) {
             if (auto message = co_await read(); !message.empty()) {
                 co_await dispatch(message);
