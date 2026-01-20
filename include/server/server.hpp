@@ -3,10 +3,10 @@
 // 用户界面层
 
 #include "app/app.hpp"
-#include "domain/model/basic.hpp"
-#include "domain/model/flag.hpp"
 #include "jsonrpc/request.hpp"
 #include "jsonrpc/response.hpp"
+#include "lsp/basic.hpp"
+#include "lsp/flag.hpp"
 
 #include <boost/asio.hpp>
 #include <boost/cobalt.hpp>
@@ -45,12 +45,12 @@ public:
         stdout_.close();
     }
 
-    auto Shutdown(const nlohmann::json &params) -> domain::model::Protocol {
+    auto Shutdown(const nlohmann::json &params) -> lsp::Protocol {
         Close();
         return {};
     }
 
-    auto Exit(const nlohmann::json &params) -> domain::model::Protocol {
+    auto Exit(const nlohmann::json &params) -> lsp::Protocol {
         Close();
         return {};
     }
@@ -96,7 +96,7 @@ private:
     auto read() -> boost::cobalt::task<std::string> {
         while (true) {
             // 一次性读取直到头部结束标记 "\r\n\r\n"
-            co_await boost::asio::async_read_until(stdin_, buffer_, domain::model::Delimiter, boost::cobalt::use_task);
+            co_await boost::asio::async_read_until(stdin_, buffer_, lsp::Delimiter, boost::cobalt::use_task);
 
             // 解析头部
             std::istream is(&buffer_);
@@ -113,7 +113,7 @@ private:
                 continue;
             }
 
-            if (header.starts_with(domain::model::HeaderLen)) {
+            if (header.starts_with(lsp::HeaderLen)) {
                 const std::size_t length = std::stoul(header.substr(16));
 
                 // 读取消息体
@@ -143,9 +143,9 @@ private:
                 const auto output = response_.construct(std::get<0>(request->Id()));
                 output->SetResult(result.Encode());
                 auto message = std::format("{}{}{}{}",
-                                           domain::model::HeaderLen,
+                                           lsp::HeaderLen,
                                            output->String().size(),
-                                           domain::model::Delimiter,
+                                           lsp::Delimiter,
                                            output->String());
                 co_await boost::asio::async_write(stdout_, boost::asio::buffer(message), boost::cobalt::use_task);
                 response_.destroy(output);
@@ -159,7 +159,7 @@ private:
     boost::asio::posix::stream_descriptor stdout_;    // 标准输出
     boost::asio::streambuf                buffer_{};  // 可自动扩容的缓冲区
     std::shared_ptr<app::App>             app_{std::make_shared<app::App>()};
-    std::unordered_map<std::string, std::function<domain::model::Protocol(const nlohmann::json &params)>> handler_{};
+    std::unordered_map<std::string, std::function<lsp::Protocol(const nlohmann::json &params)>> handler_{};
     // 接口处理
     boost::object_pool<uranus::jsonrpc::Request>  request_{};   // 请求池
     boost::object_pool<uranus::jsonrpc::Response> response_{};  // 响应池

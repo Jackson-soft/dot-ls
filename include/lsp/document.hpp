@@ -1,11 +1,11 @@
 #pragma once
 
-#include "domain/model/basic.hpp"
+#include "lsp/basic.hpp"
 
 #include <string>
 #include <vector>
 
-namespace domain::model {
+namespace lsp {
 enum class TextDocumentSyncKind : int { None = 0, Full = 1, Incremental = 2 };
 
 struct TextDocumentSyncOptions : public Protocol {
@@ -89,4 +89,4 @@ struct SaveOptions : public Protocol {
 struct RenameParams : public TextDocumentPositionParams, WorkDoneProgressParams {
     std::string newName;
 };
-}  // namespace domain::model
+}  // namespace lsp

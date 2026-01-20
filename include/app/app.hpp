@@ -2,9 +2,9 @@
 
 // 应用模块
 
-#include "domain/model/basic.hpp"
 #include "domain/service/document.hpp"
 #include "domain/service/lifecycle.hpp"
+#include "lsp/basic.hpp"
 
 #include <memory>
 #include <nlohmann/json.hpp>
@@ -15,43 +15,43 @@ public:
     App()  = default;
     ~App() = default;
 
-    auto Initialize(const nlohmann::json &params) -> domain::model::Protocol {
-        auto input = domain::model::InitializeParams();
+    auto Initialize(const nlohmann::json &params) -> lsp::Protocol {
+        auto input = lsp::InitializeParams();
         input.Decode(params);
         return lifecycle_->Initialize(input);
     }
 
-    auto Initialized(const nlohmann::json &params) -> domain::model::Protocol {
+    auto Initialized(const nlohmann::json &params) -> lsp::Protocol {
         return {};
     }
 
-    auto DidOpen(const nlohmann::json &params) -> domain::model::Protocol {
-        auto input = domain::model::DidOpenTextDocumentParams();
+    auto DidOpen(const nlohmann::json &params) -> lsp::Protocol {
+        auto input = lsp::DidOpenTextDocumentParams();
         input.Decode(params);
         return document_->DidOpen(input);
     }
 
-    auto DidSave(const nlohmann::json &params) -> domain::model::Protocol {
+    auto DidSave(const nlohmann::json &params) -> lsp::Protocol {
         return {};
     }
 
-    auto DidChange(const nlohmann::json &params) -> domain::model::Protocol {
+    auto DidChange(const nlohmann::json &params) -> lsp::Protocol {
         return {};
     }
 
-    auto DidClose(const nlohmann::json &params) -> domain::model::Protocol {
+    auto DidClose(const nlohmann::json &params) -> lsp::Protocol {
         return {};
     }
 
-    auto Rename(const nlohmann::json &params) -> domain::model::Protocol {
+    auto Rename(const nlohmann::json &params) -> lsp::Protocol {
         return {};
     }
 
-    auto Completion(const nlohmann::json &params) -> domain::model::Protocol {
+    auto Completion(const nlohmann::json &params) -> lsp::Protocol {
         return {};
     }
 
-    auto Resolve(const nlohmann::json &params) -> domain::model::Protocol {
+    auto Resolve(const nlohmann::json &params) -> lsp::Protocol {
         return {};
     }
 

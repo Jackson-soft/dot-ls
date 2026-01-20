@@ -2,8 +2,8 @@
 
 // lsp lifecycle 相关的数据结构
 
-#include "domain/model/basic.hpp"
-#include "domain/model/document.hpp"
+#include "lsp/basic.hpp"
+#include "lsp/document.hpp"
 
 #include <any>
 #include <cstdint>
@@ -11,7 +11,7 @@
 #include <string_view>
 #include <vector>
 
-namespace domain::model {
+namespace lsp {
 struct SignatureHelpOptions : public WorkDoneProgressOptions {
     auto Encode() -> nlohmann::json override {
         nlohmann::json json;
@@ -350,4 +350,4 @@ struct LogTraceParams : public Protocol {
     std::string message;
     std::string verbose;
 };
-}  // namespace domain::model
+}  // namespace lsp

@@ -1,13 +1,13 @@
 #pragma once
 
-#include "domain/model/basic.hpp"
+#include "lsp/basic.hpp"
 
 #include <any>
 #include <optional>
 #include <string>
 #include <vector>
 
-namespace domain::model {
+namespace lsp {
 struct CompletionContext : public Protocol {
     CompletionTriggerKind triggerKind;
     std::string           triggerCharacter;
@@ -32,4 +32,4 @@ struct CompletionList : public Protocol {
     std::vector<CompletionItem> items;
 };
 
-}  // namespace domain::model
+}  // namespace lsp

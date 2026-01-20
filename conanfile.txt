@@ -1,9 +1,9 @@
 [requires]
 boost/1.90.0
 nlohmann_json/3.12.0
-spdlog/1.16.0
+spdlog/1.17.0
 tree-sitter/0.25.9
-catch2/3.11.0
+catch2/3.12.0
 
 [generators]
 CMakeDeps

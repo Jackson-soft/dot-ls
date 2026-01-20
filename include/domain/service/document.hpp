@@ -1,6 +1,6 @@
 #pragma once
 
-#include "domain/model/document.hpp"
+#include "lsp/document.hpp"
 
 // 文本相关
 namespace domain::service {
@@ -9,23 +9,23 @@ public:
     Document()  = default;
     ~Document() = default;
 
-    auto DidOpen(const domain::model::DidOpenTextDocumentParams &params) -> domain::model::Protocol {
+    auto DidOpen(const lsp::DidOpenTextDocumentParams &params) -> lsp::Protocol {
         return {};
     }
 
-    auto DidSave(const domain::model::SaveOptions &params) -> domain::model::Protocol {
+    auto DidSave(const lsp::SaveOptions &params) -> lsp::Protocol {
         return {};
     }
 
-    auto DidChange(const domain::model::DidChangeTextDocumentParams &params) -> domain::model::Protocol {
+    auto DidChange(const lsp::DidChangeTextDocumentParams &params) -> lsp::Protocol {
         return {};
     }
 
-    auto DidClose(const domain::model::DidCloseTextDocumentParams &params) -> domain::model::Protocol {
+    auto DidClose(const lsp::DidCloseTextDocumentParams &params) -> lsp::Protocol {
         return {};
     }
 
-    auto Rename(const domain::model::RenameParams &params) -> domain::model::Protocol {
+    auto Rename(const lsp::RenameParams &params) -> lsp::Protocol {
         return {};
     }
 };

@@ -7,7 +7,7 @@
 #include <string>
 #include <variant>
 
-namespace domain::model {
+namespace lsp {
 struct Protocol {
     Protocol()          = default;
     virtual ~Protocol() = default;
@@ -304,4 +304,4 @@ struct CompletionOptions : public WorkDoneProgressOptions {
     bool                     resolveProvider{false};
     CompletionItem           completionItem;
 };
-}  // namespace domain::model
+}  // namespace lsp
