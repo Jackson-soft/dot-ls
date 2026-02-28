@@ -2,7 +2,7 @@
 
 // 应用模块
 
-#include "domain/service/document.hpp"
+#include "../domain/entity/document.hpp"
 #include "domain/service/lifecycle.hpp"
 #include "lsp/basic.hpp"
 
@@ -57,6 +57,6 @@ public:
 
 private:
     std::unique_ptr<domain::service::Lifecycle> lifecycle_{std::make_unique<domain::service::Lifecycle>()};
-    std::unique_ptr<domain::service::Document>  document_{std::make_unique<domain::service::Document>()};
+    std::unique_ptr<domain::entity::Document>   document_{std::make_unique<domain::entity::Document>()};
 };
 }  // namespace app

@@ -3,7 +3,7 @@
 #include "lsp/document.hpp"
 
 // 文本相关
-namespace domain::service {
+namespace domain::entity {
 class Document {
 public:
     Document()  = default;
@@ -29,4 +29,4 @@ public:
         return {};
     }
 };
-}  // namespace domain::service
+}  // namespace domain::entity
