@@ -2,29 +2,80 @@
 
 #include "protocol/lsp/document.hpp"
 
+#include <string>
+#include <unordered_map>
+
 // 文本相关
 namespace domain::entity {
+
+// 内存中的文档快照
+struct DocumentEntry {
+  std::string uri;
+  std::string languageId;
+  std::int64_t version{0};
+  std::string text;
+};
+
 class Document {
 public:
-  Document() = default;
+  Document()  = default;
   ~Document() = default;
 
+  // 打开文档：加入存储
   auto DidOpen(const lsp::DidOpenTextDocumentParams &params) -> lsp::Protocol {
+    const auto &doc = params.textDocument;
+    store_[doc.uri] = DocumentEntry{
+        .uri        = doc.uri,
+        .languageId = doc.languageId,
+        .version    = doc.version,
+        .text       = doc.text,
+    };
     return {};
   }
 
-  auto DidSave(const lsp::SaveOptions &params) -> lsp::Protocol { return {}; }
-
+  // 内容变更：Full 同步模式下用第一个 contentChange 替换全文
   auto DidChange(const lsp::DidChangeTextDocumentParams &params)
       -> lsp::Protocol {
+    if (const auto it = store_.find(params.textDocument.uri);
+        it != store_.end()) {
+      it->second.version = params.textDocument.version;
+      if (!params.contentChanges.empty()) {
+        // Full 同步：直接替换全文
+        it->second.text = params.contentChanges.front().text;
+      }
+    }
     return {};
   }
 
+  // 保存文档：若客户端附带了文本则同步更新
+  auto DidSave(const lsp::DidSaveTextDocumentParams &params) -> lsp::Protocol {
+    if (!params.text.empty()) {
+      if (const auto it = store_.find(params.textDocument.uri);
+          it != store_.end()) {
+        it->second.text = params.text;
+      }
+    }
+    return {};
+  }
+
+  // 关闭文档：从存储中移除
   auto DidClose(const lsp::DidCloseTextDocumentParams &params)
       -> lsp::Protocol {
+    store_.erase(params.textDocument.uri);
     return {};
   }
 
   auto Rename(const lsp::RenameParams &params) -> lsp::Protocol { return {}; }
+
+  // 供其他服务查询文档内容
+  [[nodiscard]] auto Get(const std::string &uri) const
+      -> const DocumentEntry * {
+    const auto it = store_.find(uri);
+    return it != store_.end() ? &it->second : nullptr;
+  }
+
+private:
+  std::unordered_map<std::string, DocumentEntry> store_;
 };
+
 } // namespace domain::entity

@@ -2,113 +2,89 @@
 
 # LSP 服务器测试脚本
 # 使用方法: ./run_test.sh [test_type]
+#   default    - 运行所有测试套件
+#   completion - 仅运行补全测试
+#   document   - 仅运行文档协议测试 (didOpen/didChange/didSave)
+#   performance - 运行性能测试
+#   help       - 显示帮助
 
 set -e
 
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SERVER_PATH="$PROJECT_DIR/build/Debug/dot-ls"
-CLIENT_PATH="$PROJECT_DIR/client/client.lua"
+CLIENT_DIR="$PROJECT_DIR/client"
 
 echo "=== DOT-LS LSP Server Test Runner ==="
 echo "Project: $PROJECT_DIR"
-echo "Server: $SERVER_PATH"
-echo "Client: $CLIENT_PATH"
+echo "Server : $SERVER_PATH"
 echo ""
 
 # 检查服务器是否存在
 if [ ! -f "$SERVER_PATH" ]; then
     echo "❌ LSP server not found at: $SERVER_PATH"
-    echo "Please build the project first:"
-    echo "  cd $PROJECT_DIR"
-    echo "  make"
+    echo "Please build the project first: cd $PROJECT_DIR && make"
     exit 1
 fi
 
-# 检查客户端是否存在
-if [ ! -f "$CLIENT_PATH" ]; then
-    echo "❌ Client script not found at: $CLIENT_PATH"
-    exit 1
-fi
-
-# 检查 lua 和 cjson 是否可用
+# 检查 lua 是否可用
 if ! command -v lua &>/dev/null; then
-    echo "❌ Lua not found. Please install Lua:"
-    echo "  brew install lua"
+    echo "❌ Lua not found. Install with: brew install lua"
     exit 1
 fi
 
-if ! lua -e "require('cjson')" &>/dev/null; then
-    echo "❌ lua-cjson not found. Please install it:"
-    echo "  brew install lua"
-    echo "  luarocks install lua-cjson"
-    exit 1
-fi
-
-# 运行测试的函数
-run_test() {
-    local test_name="$1"
-    echo "🧪 Running test: $test_name"
+# 运行单个 Lua 测试脚本
+run_lua_test() {
+    local name="$1"
+    local script="$2"
+    echo "🧪 Running: $name"
     echo "=================================="
-
-    # 启动服务器并通过管道发送测试数据
-    cd "$PROJECT_DIR"
-    lua "$CLIENT_PATH" | "$SERVER_PATH" 2>&1 &
-
-    local server_pid=$!
-
-    # 等待测试完成
-    sleep 3
-
-    # 检查服务器是否还在运行
-    if kill -0 $server_pid 2>/dev/null; then
-        echo "⚠️  Server still running, killing..."
-        kill $server_pid 2>/dev/null || true
-        wait $server_pid 2>/dev/null || true
+    if lua "$script" "$SERVER_PATH"; then
+        echo "✅ $name passed"
+    else
+        echo "❌ $name FAILED"
+        return 1
     fi
-
-    echo "✅ Test completed: $test_name"
     echo ""
 }
 
-# 运行交互式测试的函数
-run_interactive() {
-    echo "🎮 Running interactive test..."
-    echo "Choose your test and the client will pipe to the server"
+# 旧式管道测试（client.lua）
+run_pipe_test() {
+    echo "🧪 Running: Pipe client test"
     echo "=================================="
-
     cd "$PROJECT_DIR"
-    lua client/interactive_test.lua | "$SERVER_PATH" 2>&1
-
-    echo "✅ Interactive test completed"
+    lua "$CLIENT_DIR/client.lua" "$SERVER_PATH" 2>&1 &
+    local pid=$!
+    sleep 3
+    if kill -0 $pid 2>/dev/null; then
+        kill $pid 2>/dev/null || true
+        wait $pid 2>/dev/null || true
+    fi
+    echo "✅ Pipe client test completed"
+    echo ""
 }
 
-# 运行性能测试
+# 性能测试
 run_performance_test() {
     echo "⚡ Running performance test..."
     echo "=================================="
-
-    local start_time
+    local start_time end_time duration
     start_time=$(date +%s.%N)
-
-    # 运行多次测试
     for i in {1..5}; do
-        echo "Running iteration $i/5..."
-        run_test "Performance Test $i"
+        echo "Iteration $i/5..."
+        lua "$CLIENT_DIR/test_completion.lua" "$SERVER_PATH" 2>/dev/null
     done
-
-    local end_time
     end_time=$(date +%s.%N)
-    local duration
     duration=$(echo "$end_time - $start_time" | bc -l 2>/dev/null || echo "N/A")
-
     echo "⏱️  Total time: ${duration}s"
     echo "✅ Performance test completed"
 }
 
-# 主逻辑
 case "${1:-default}" in
-    "interactive" | "i")
-        run_interactive
+    "completion" | "c")
+        run_lua_test "Completion Test Suite" "$CLIENT_DIR/test_completion.lua"
+        ;;
+    "document" | "doc" | "d")
+        run_lua_test "Document Protocol Test Suite" "$CLIENT_DIR/test_document.lua"
         ;;
     "performance" | "perf" | "p")
         run_performance_test
@@ -116,14 +92,15 @@ case "${1:-default}" in
     "help" | "h" | "--help")
         echo "Usage: $0 [test_type]"
         echo ""
-        echo "Test types:"
-        echo "  default      - Run full test sequence"
-        echo "  interactive  - Run interactive test"
-        echo "  performance  - Run performance test"
-        echo "  help         - Show this help"
+        echo "  default     Run all test suites (completion + document)"
+        echo "  completion  Run completion tests only"
+        echo "  document    Run didOpen/didChange/didSave/didClose lifecycle tests"
+        echo "  performance Run completion test 5x and report time"
+        echo "  help        Show this help"
         ;;
     *)
-        run_test "Full Test Sequence"
+        run_lua_test "Completion Test Suite"        "$CLIENT_DIR/test_completion.lua"
+        run_lua_test "Document Protocol Test Suite" "$CLIENT_DIR/test_document.lua"
         ;;
 esac
 

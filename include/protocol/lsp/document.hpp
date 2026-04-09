@@ -62,8 +62,31 @@ struct TextDocumentChangeRegistrationOptions
 };
 
 struct DidChangeTextDocumentParams : public Protocol {
+  void Decode(const nlohmann::json &input) override {
+    textDocument.Decode(input["textDocument"].template get<nlohmann::json>());
+    for (const auto &change : input["contentChanges"]) {
+      TextDocumentContentChangeEvent ev;
+      ev.Decode(change);
+      contentChanges.push_back(std::move(ev));
+    }
+  }
+
   VersionedTextDocumentIdentifier textDocument;
   std::vector<TextDocumentContentChangeEvent> contentChanges;
+};
+
+// textDocument/didSave 的入参
+// text 字段仅在 SaveOptions::includeText == true 时由客户端发送
+struct DidSaveTextDocumentParams : public Protocol {
+  void Decode(const nlohmann::json &input) override {
+    textDocument.Decode(input["textDocument"].template get<nlohmann::json>());
+    if (input.contains("text") && input["text"].is_string()) {
+      text = input["text"].template get<std::string>();
+    }
+  }
+
+  TextDocumentIdentifier textDocument;
+  std::string text; // 可选
 };
 
 enum class TextDocumentSaveReason { Manual = 1, AfterDelay = 2, FocusOut = 3 };

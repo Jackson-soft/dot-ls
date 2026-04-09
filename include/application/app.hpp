@@ -33,15 +33,21 @@ public:
   }
 
   auto DidSave(const nlohmann::json &params) -> nlohmann::json {
-    return nlohmann::json::object();
+    auto input = lsp::DidSaveTextDocumentParams();
+    input.Decode(params);
+    return document_->DidSave(input).Encode();
   }
 
   auto DidChange(const nlohmann::json &params) -> nlohmann::json {
-    return nlohmann::json::object();
+    auto input = lsp::DidChangeTextDocumentParams();
+    input.Decode(params);
+    return document_->DidChange(input).Encode();
   }
 
   auto DidClose(const nlohmann::json &params) -> nlohmann::json {
-    return nlohmann::json::object();
+    auto input = lsp::DidCloseTextDocumentParams();
+    input.Decode(params);
+    return document_->DidClose(input).Encode();
   }
 
   auto Rename(const nlohmann::json &params) -> nlohmann::json {

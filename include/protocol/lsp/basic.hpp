@@ -105,6 +105,11 @@ struct TextDocumentIdentifier : public Protocol {
 };
 
 struct VersionedTextDocumentIdentifier : public TextDocumentIdentifier {
+  void Decode(const nlohmann::json &input) override {
+    TextDocumentIdentifier::Decode(input);
+    version = input["version"].template get<std::int64_t>();
+  }
+
   std::int64_t version{0};
 };
 
@@ -179,8 +184,19 @@ struct Command : public Protocol {
 };
 
 struct TextDocumentContentChangeEvent : public Protocol {
+  // Full 同步：仅 text；Incremental 同步：range + text
+  void Decode(const nlohmann::json &input) override {
+    text = input["text"].template get<std::string>();
+    if (input.contains("range")) {
+      range.Decode(input["range"]);
+    }
+    if (input.contains("rangeLength")) {
+      rangeLength = input["rangeLength"].template get<std::uint64_t>();
+    }
+  }
+
   Range range;
-  std::uint64_t rangeLength;
+  std::uint64_t rangeLength{0};
   std::string text;
 };
 

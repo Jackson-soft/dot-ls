@@ -24,7 +24,6 @@ target_include_directories(project_options
 
 target_link_libraries(project_options
     INTERFACE
-        boost::boost
         nlohmann_json::nlohmann_json
         tree-sitter::tree-sitter)
 
@@ -43,6 +42,7 @@ add_executable(${PROJECT_NAME} src/main.cpp)
 target_link_libraries(${PROJECT_NAME}
     PRIVATE
         project_options
+        boost::boost
         spdlog::spdlog)
 
 if(CMAKE_SYSTEM_NAME MATCHES "Linux")

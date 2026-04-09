@@ -2,10 +2,10 @@ name: CI
 
 on:
   push:
-    branches: [main]
-    tags: ["*.*.*"]
+    branches: [ main ]
+    tags: [ "*.*.*" ]
   pull_request:
-    branches: [main]
+    branches: [ main ]
 
 # Cancel redundant runs on the same branch / PR
 concurrency:
@@ -24,16 +24,12 @@ jobs:
         include:
           - os: ubuntu-latest
             platform: linux-x64
-            cpp_compiler: g++-14
             binary: dot-ls
           - os: macos-latest
             platform: darwin-arm64
             binary: dot-ls
-          - os: macos-latest-large
-            platform: darwin-x64
-            binary: dot-ls
           - os: windows-latest
-            platform: win32-x64
+            platform: win-x64
             binary: dot-ls.exe
 
     steps:
@@ -68,8 +64,6 @@ jobs:
         run: |
           if [ "${{ runner.os }}" = "Windows" ]; then
             cmake --preset conan-default
-          elif [ "${{ runner.os }}" = "Linux" ]; then
-            cmake --preset conan-release -DCMAKE_CXX_COMPILER="${{ matrix.cpp_compiler }}"
           else
             cmake --preset conan-release
           fi
@@ -81,7 +75,7 @@ jobs:
         run: ctest --preset conan-release --output-on-failure
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: dot-ls-${{ matrix.platform }}
           path: build/Release/${{ matrix.binary }}
@@ -96,7 +90,7 @@ jobs:
       contents: write
     steps:
       - name: Download all artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           path: artifacts
 
