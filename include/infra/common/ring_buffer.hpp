@@ -4,12 +4,11 @@
 
 #include <cstddef>
 
-namespace basis::common {
-template<typename T>
-class RingBuffer {
+namespace infra::common {
+template <typename T> class RingBuffer {
 public:
-    explicit RingBuffer(std::size_t capacity) {}
+  explicit RingBuffer(std::size_t capacity) {}
 
-    ~RingBuffer() = default;
+  ~RingBuffer() = default;
 };
-}  // namespace basis::common
+} // namespace infra::common
