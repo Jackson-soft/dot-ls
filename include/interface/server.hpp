@@ -26,6 +26,12 @@
 #include <unordered_map>
 #include <utility>
 
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <unistd.h>
+#endif
+
 namespace interface {
 
 // LSP 生命周期状态
@@ -35,10 +41,24 @@ namespace interface {
 //                                                         std::exit(0)
 enum class State { Uninitialized, Running, ShuttingDown };
 
+// ── 平台相关 I/O 类型 ─────────────────────────────────────────────────────────
+#ifdef _WIN32
+using StdioStream = boost::asio::windows::stream_handle;
+#else
+using StdioStream = boost::asio::posix::stream_descriptor;
+#endif
+
 class Server {
 public:
     explicit Server(boost::asio::io_context &ioCtx)
-        : stdin_(ioCtx, ::dup(STDIN_FILENO)), stdout_(ioCtx, ::dup(STDOUT_FILENO)) {
+#ifdef _WIN32
+        : stdin_(ioCtx, ::GetStdHandle(STD_INPUT_HANDLE)),
+          stdout_(ioCtx, ::GetStdHandle(STD_OUTPUT_HANDLE))
+#else
+        : stdin_(ioCtx, ::dup(STDIN_FILENO)),
+          stdout_(ioCtx, ::dup(STDOUT_FILENO))
+#endif
+    {
         enroll();
     }
 
@@ -294,8 +314,8 @@ private:
     }
 
     // ── 成员 ──────────────────────────────────────────────────────────────────────
-    boost::asio::posix::stream_descriptor stdin_;           // 标准输入
-    boost::asio::posix::stream_descriptor stdout_;          // 标准输出
+    StdioStream                           stdin_;           // 标准输入
+    StdioStream                           stdout_;          // 标准输出
     infra::common::RingBuffer<char>       rxBuf_{1 << 20};  // 1 MB 接收环形缓冲区
     infra::common::RingBuffer<char>       txBuf_{1 << 20};  // 1 MB 发送环形缓冲区
     std::shared_ptr<application::App>     app_{std::make_shared<application::App>()};
