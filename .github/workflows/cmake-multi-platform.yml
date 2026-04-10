@@ -25,6 +25,8 @@ jobs:
           - os: ubuntu-latest
             platform: linux-x64
             binary: dot-ls
+            cc: gcc-14
+            cxx: g++-14
           - os: macos-latest
             platform: darwin-arm64
             binary: dot-ls
@@ -37,11 +39,19 @@ jobs:
         with:
           submodules: true
 
+      - name: Install GCC 14 (Linux only)
+        if: runner.os == 'Linux'
+        run: sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-14 14 --slave /usr/bin/g++ g++ /usr/bin/g++-14
+
       - name: Install Conan
         shell: bash
         run: |
           pipx install conan
           conan profile detect --force
+          if [ -n "${{ matrix.cc }}" ]; then
+            sed -i "s|^compiler.version=.*|compiler.version=14|" ~/.conan2/profiles/default
+            sed -i "s|^[cC][cC]=.*|CC=${{ matrix.cc }}|; s|^[cC][xX][xX]=.*|CXX=${{ matrix.cxx }}|" ~/.conan2/profiles/default || true
+          fi
 
       - name: Cache Conan packages
         uses: actions/cache@v5
@@ -52,6 +62,9 @@ jobs:
 
       - name: Install dependencies
         shell: bash
+        env:
+          CC: ${{ matrix.cc }}
+          CXX: ${{ matrix.cxx }}
         run: |
           args=(. -s compiler.cppstd=23 -s build_type=Release --build=missing --update)
           if [ "${{ runner.os }}" = "Linux" ]; then
@@ -61,6 +74,9 @@ jobs:
 
       - name: Configure
         shell: bash
+        env:
+          CC: ${{ matrix.cc }}
+          CXX: ${{ matrix.cxx }}
         run: |
           if [ "${{ runner.os }}" = "Windows" ]; then
             cmake --preset conan-default
