@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.28)
 
-project(dot-ls LANGUAGES CXX)
+project(dot-ls LANGUAGES C CXX)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
@@ -9,6 +9,10 @@ find_package(Boost    REQUIRED)
 find_package(nlohmann_json REQUIRED)
 find_package(tree-sitter   REQUIRED)
 find_package(spdlog   REQUIRED)
+
+# ── DOT tree-sitter grammar (C, compiled as a small static library) ────────────
+add_library(ts_dot STATIC tree-sitter-dot/src/parser.c)
+target_include_directories(ts_dot PRIVATE tree-sitter-dot/src)
 
 # ── Common build settings (INTERFACE library – no build artifact) ────────────
 # Shared include dirs, libraries, and platform flags used by every target.
@@ -42,6 +46,7 @@ add_executable(${PROJECT_NAME} src/main.cpp)
 target_link_libraries(${PROJECT_NAME}
     PRIVATE
         project_options
+        ts_dot
         boost::boost
         spdlog::spdlog)
 

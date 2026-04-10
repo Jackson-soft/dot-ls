@@ -2,10 +2,10 @@ name: CI
 
 on:
   push:
-    branches: [ main ]
-    tags: [ "*.*.*" ]
+    branches: [main]
+    tags: ["*.*.*"]
   pull_request:
-    branches: [ main ]
+    branches: [main]
 
 # Cancel redundant runs on the same branch / PR
 concurrency:
@@ -44,7 +44,7 @@ jobs:
           conan profile detect --force
 
       - name: Cache Conan packages
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.conan2/p
           key: conan-${{ matrix.platform }}-${{ hashFiles('conanfile.txt') }}
@@ -74,11 +74,25 @@ jobs:
       - name: Test
         run: ctest --preset conan-release --output-on-failure
 
+      - name: Package binary
+        shell: bash
+        run: |
+          mkdir -p dist
+          cp build/Release/${{ matrix.binary }} dist/
+          cd dist
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            7z a "../dot-ls-${{ matrix.platform }}.zip" "${{ matrix.binary }}"
+          else
+            tar -czf "../dot-ls-${{ matrix.platform }}.tar.gz" "${{ matrix.binary }}"
+          fi
+
       - name: Upload artifact
         uses: actions/upload-artifact@v7
         with:
           name: dot-ls-${{ matrix.platform }}
-          path: build/Release/${{ matrix.binary }}
+          path: |
+            dot-ls-${{ matrix.platform }}.tar.gz
+            dot-ls-${{ matrix.platform }}.zip
           overwrite: true
 
   # ── Release (runs once after all builds pass) ───────────────────────────────
@@ -93,22 +107,12 @@ jobs:
         uses: actions/download-artifact@v7
         with:
           path: artifacts
-
-      - name: Rename binaries for release
-        shell: bash
-        run: |
-          for dir in artifacts/dot-ls-*; do
-            platform="${dir#artifacts/dot-ls-}"
-            for file in "$dir"/*; do
-              base="$(basename "$file")"
-              ext=""
-              [[ "$base" == *.* ]] && ext=".${base##*.}"
-              mv "$file" "artifacts/dot-ls-${platform}${ext}"
-            done
-          done
+          merge-multiple: true
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: artifacts/dot-ls-*
+          files: |
+            artifacts/dot-ls-*.tar.gz
+            artifacts/dot-ls-*.zip
           generate_release_notes: true
