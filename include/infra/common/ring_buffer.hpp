@@ -28,8 +28,9 @@ public:
 
     // 追加单个元素，缓冲区已满时返回 false
     auto push(T item) noexcept(std::is_nothrow_move_assignable_v<T>) -> bool {
-        if (full())
+        if (full()) {
             return false;
+        }
         buf_[tail_] = std::move(item);
         tail_       = advance(tail_);
         ++size_;
@@ -49,8 +50,9 @@ public:
 
     // 取出头部单个元素，缓冲区为空时返回 false
     bool pop(T &out) noexcept(std::is_nothrow_move_assignable_v<T>) {
-        if (empty())
+        if (empty()) {
             return false;
+        }
         out   = std::move(buf_[head_]);
         head_ = advance(head_);
         --size_;
@@ -58,7 +60,7 @@ public:
     }
 
     // 读取距头部偏移 i 处的元素（不消费）
-    [[nodiscard]] const T &peek(std::size_t i) const noexcept {
+    [[nodiscard]] auto peek(std::size_t i) const noexcept -> const T & {
         assert(i < size_);
         return buf_[(head_ + i) % capacity_];
     }
@@ -71,17 +73,19 @@ public:
     }
 
     // 从头部偏移 from 处起查找 needle；找到返回起始索引，否则返回 npos
-    [[nodiscard]] std::size_t find(std::span<const T> needle, std::size_t from = 0) const noexcept {
-        if (needle.empty() || needle.size() + from > size_)
+    [[nodiscard]] auto find(std::span<const T> needle, std::size_t from = 0) const noexcept -> std::size_t {
+        if (needle.empty() || needle.size() + from > size_) {
             return npos;
+        }
         const std::size_t limit = size_ - needle.size() + 1;
         for (std::size_t i = from; i < limit; ++i) {
             bool match = true;
             for (std::size_t j = 0; j < needle.size() && match; ++j) {
                 match = (peek(i + j) == needle[j]);
             }
-            if (match)
+            if (match) {
                 return i;
+            }
         }
         return npos;
     }
@@ -89,23 +93,24 @@ public:
     // 将头部 n 个元素复制到 dest（不消费）
     void copy_out(std::size_t n, T *dest) const {
         assert(n <= size_);
-        for (std::size_t i = 0; i < n; ++i)
+        for (std::size_t i = 0; i < n; ++i) {
             dest[i] = peek(i);
+        }
     }
 
-    [[nodiscard]] bool empty() const noexcept {
+    [[nodiscard]] auto empty() const noexcept -> bool {
         return size_ == 0;
     }
 
-    [[nodiscard]] bool full() const noexcept {
+    [[nodiscard]] auto full() const noexcept -> bool {
         return size_ == capacity_;
     }
 
-    [[nodiscard]] std::size_t size() const noexcept {
+    [[nodiscard]] auto size() const noexcept -> std::size_t {
         return size_;
     }
 
-    [[nodiscard]] std::size_t capacity() const noexcept {
+    [[nodiscard]] auto capacity() const noexcept -> std::size_t {
         return capacity_;
     }
 

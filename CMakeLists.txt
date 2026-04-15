@@ -63,6 +63,7 @@ add_executable(my_test test/main.cpp)
 target_link_libraries(my_test
     PRIVATE
         project_options
+        ts_dot
         Catch2::Catch2WithMain)
 
 add_test(NAME my_test COMMAND $<TARGET_FILE:my_test> --success)

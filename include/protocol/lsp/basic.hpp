@@ -12,7 +12,11 @@ struct Protocol {
     Protocol()          = default;
     virtual ~Protocol() = default;
 
-    Protocol(Protocol &&) = default;
+    // 声明移动构造后，拷贝构造/拷贝赋值/移动赋值均被隐式删除，需显式还原
+    Protocol(const Protocol &)            = default;
+    Protocol(Protocol &&)                 = default;
+    Protocol &operator=(const Protocol &) = default;
+    Protocol &operator=(Protocol &&)      = default;
 
     virtual auto Encode() -> nlohmann::json {
         return nlohmann::json::object();
@@ -126,6 +130,10 @@ struct DocumentFilter : public Protocol {
 };
 
 struct TextEdit : public Protocol {
+    auto Encode() -> nlohmann::json override {
+        return nlohmann::json{{"range", range.Encode()}, {"newText", newText}};
+    }
+
     Range       range;
     std::string newText;
 };
@@ -310,17 +318,17 @@ struct CompletionItem : public Protocol {
 
     std::string                               label;
     std::optional<CompletionItemLabelDetails> labelDetails;
-    CompletionItemKind                        kind;
+    CompletionItemKind                        kind{CompletionItemKind::Text};
     std::vector<CompletionItemTag>            tags;
     std::string                               detail;
     std::string                               documentation;
-    bool                                      deprecated;
-    bool                                      preselect;
+    bool                                      deprecated{false};
+    bool                                      preselect{false};
     std::optional<std::string>                sortText;
     std::optional<std::string>                filterText;
     std::string                               insertText;
-    InsertTextFormat                          insertTextFormat;
-    InsertTextMode                            insertTextMode;
+    InsertTextFormat                          insertTextFormat{InsertTextFormat::PlainText};
+    InsertTextMode                            insertTextMode{InsertTextMode::asIs};
     TextEdit                                  textEdit;
     std::optional<std::string>                textEditText;
     std::vector<TextEdit>                     additionalTextEdits;
@@ -332,18 +340,15 @@ struct CompletionItem : public Protocol {
 struct CompletionOptions : public WorkDoneProgressOptions {
     auto Encode() -> nlohmann::json override {
         auto output = nlohmann::json::object();
-
-        output["triggerCharacters"]   = triggerCharacters;
-        output["allCommitCharacters"] = allCommitCharacters;
-        output["resolveProvider"]     = resolveProvider;
-        output["completionItem"]      = completionItem.Encode();
-
+        output["triggerCharacters"] = triggerCharacters;
+        output["resolveProvider"]   = resolveProvider;
+        // 告知客户端支持 snippet insertTextFormat
+        output["completionItem"] = nlohmann::json{{"snippetSupport", true}};
         return output;
     }
 
     std::vector<std::string> triggerCharacters;
     std::vector<std::string> allCommitCharacters;
     bool                     resolveProvider{false};
-    CompletionItem           completionItem;
 };
 }  // namespace lsp

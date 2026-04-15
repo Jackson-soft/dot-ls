@@ -59,14 +59,25 @@ messages[#messages + 1] = make_lsp_message({
     }
 })
 
--- 4. completion
+-- 4a. top-level completion (position 0,0 — TopLevel context → snippets + keywords)
 messages[#messages + 1] = make_lsp_message({
     jsonrpc = "2.0",
     id = 2,
     method = "textDocument/completion",
     params = {
         textDocument = { uri = "file:///tmp/test.dot" },
-        position = { line = 1, character = 4 }
+        position = { line = 0, character = 0 }
+    }
+})
+
+-- 4b. attribute-name completion (inside [...] — AttributeName context)
+messages[#messages + 1] = make_lsp_message({
+    jsonrpc = "2.0",
+    id = 4,
+    method = "textDocument/completion",
+    params = {
+        textDocument = { uri = "file:///tmp/test.dot" },
+        position = { line = 1, character = 15 }  -- inside "[shape=box]", after "["
     }
 })
 
@@ -185,11 +196,11 @@ if init_resp and init_resp.result then
     assert_true("textDocumentSync.openClose == true", sync and sync.openClose == true)
 end
 
--- Test 2: Completion response
-log("INFO", "--- Test: Completion ---")
+-- Test 2a: Top-level completion response (snippets + keywords)
+log("INFO", "--- Test: Top-level Completion (snippets + keywords) ---")
 local comp_resp = find_response(2)
-assert_true("completion returns response", comp_resp ~= nil)
-assert_true("completion has result", comp_resp and comp_resp.result ~= nil)
+assert_true("top-level completion returns response", comp_resp ~= nil)
+assert_true("top-level completion has result", comp_resp and comp_resp.result ~= nil)
 
 if comp_resp and comp_resp.result then
     local result = comp_resp.result
@@ -199,21 +210,14 @@ if comp_resp and comp_resp.result then
     if result.items then
         local item_count = #result.items
         assert_true("items count > 0", item_count > 0)
-        log("INFO", "Got " .. item_count .. " completion items")
+        log("INFO", "Got " .. item_count .. " top-level completion items")
 
-        -- 按 kind 分类
         local found_keywords = {}
-        local found_properties = {}
-        local found_values = {}
+        local found_snippets = {}
 
         for _, item in ipairs(result.items) do
-            if item.kind == 14 then  -- Keyword
-                found_keywords[item.label] = true
-            elseif item.kind == 10 then  -- Property
-                found_properties[item.label] = true
-            elseif item.kind == 12 then  -- Value
-                found_values[item.label] = true
-            end
+            if item.kind == 14 then found_keywords[item.label] = true end  -- Keyword
+            if item.kind == 15 then found_snippets[item.label] = true end  -- Snippet
         end
 
         -- 验证关键字
@@ -222,35 +226,37 @@ if comp_resp and comp_resp.result then
             assert_true("keyword '" .. kw .. "' present", found_keywords[kw] == true)
         end
 
-        -- 验证属性
-        local expected_properties = { "label", "color", "shape", "style", "rankdir" }
-        for _, prop in ipairs(expected_properties) do
-            assert_true("property '" .. prop .. "' present", found_properties[prop] == true)
-        end
-
-        -- 验证 shape 值
-        assert_true("shape value 'box' present", found_values["box"] == true)
-        assert_true("shape value 'circle' present", found_values["circle"] == true)
-        assert_true("shape value 'ellipse' present", found_values["ellipse"] == true)
-        assert_true("shape value 'diamond' present", found_values["diamond"] == true)
+        -- 验证 Snippet 模板
+        assert_true("snippet 'digraph' present",  found_snippets["digraph"]  == true)
+        assert_true("snippet 'graph' present",    found_snippets["graph"]    == true)
+        assert_true("snippet 'subgraph' present", found_snippets["subgraph"] == true)
 
         -- 验证 item 结构完整性
         local first = result.items[1]
-        assert_true("item has label", first.label ~= nil and first.label ~= "")
-        assert_true("item has kind", first.kind ~= nil)
-        assert_true("item has detail", first.detail ~= nil)
+        assert_true("item has label",      first.label ~= nil and first.label ~= "")
+        assert_true("item has kind",       first.kind ~= nil)
         assert_true("item has insertText", first.insertText ~= nil)
+    end
+end
 
-        -- 打印所有 items
-        log("INFO", "Completion items:")
-        for i, item in ipairs(result.items) do
-            local kind_name = "?"
-            if item.kind == 14 then kind_name = "Keyword"
-            elseif item.kind == 10 then kind_name = "Property"
-            elseif item.kind == 12 then kind_name = "Value"
-            end
-            log("INFO", string.format("  [%d] %s (%s) - %s", i, item.label, kind_name, item.detail or ""))
+-- Test 2b: Attribute-name completion response (inside [...])
+log("INFO", "--- Test: Attribute-name Completion ---")
+local attr_resp = find_response(4)
+assert_true("attr completion returns response", attr_resp ~= nil)
+if attr_resp and attr_resp.result then
+    local result = attr_resp.result
+    assert_true("attr result has items", result.items ~= nil)
+    if result.items then
+        local found_props = {}
+        for _, item in ipairs(result.items) do
+            if item.kind == 10 then found_props[item.label] = true end  -- Property
         end
+        assert_true("attr 'label' present",   found_props["label"]   == true)
+        assert_true("attr 'color' present",   found_props["color"]   == true)
+        assert_true("attr 'shape' present",   found_props["shape"]   == true)
+        assert_true("attr 'style' present",   found_props["style"]   == true)
+        assert_true("attr 'rankdir' present", found_props["rankdir"] == true)
+        log("INFO", "Got " .. #result.items .. " attribute completion items")
     end
 end
 

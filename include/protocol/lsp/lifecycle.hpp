@@ -187,20 +187,41 @@ struct ServerCapabilities : public Protocol {
 
         json["completionProvider"] = completionProvider.Encode();
 
-        json["hoverProvider"]             = hoverProvider;
-        json["signatureHelpProvider"]     = signatureHelpProvider.Encode();
-        json["declarationProvider"]       = declarationProvider;
-        json["definitionProvider"]        = definitionProvider;
-        json["typeDefinitionProvider"]    = typeDefinitionProvider;
-        json["implementationProvider"]    = implementationProvider;
-        json["documentHighlightProvider"] = documentHighlightProvider;
-        json["referencesProvider"]        = referencesProvider;
+        if (hoverProvider)             json["hoverProvider"]             = true;
+        if (declarationProvider)       json["declarationProvider"]       = true;
+        if (definitionProvider)        json["definitionProvider"]        = true;
+        if (typeDefinitionProvider)    json["typeDefinitionProvider"]    = true;
+        if (implementationProvider)    json["implementationProvider"]    = true;
+        if (documentHighlightProvider) json["documentHighlightProvider"] = true;
+        if (referencesProvider)        json["referencesProvider"]        = true;
+        if (documentFormattingProvider)      json["documentFormattingProvider"]      = true;
+        if (documentRangeFormattingProvider) json["documentRangeFormattingProvider"] = true;
+        if (documentSymbolProvider)    json["documentSymbolProvider"]    = true;
+        if (renameProvider)            json["renameProvider"]            = true;
+        if (foldingRangeProvider)      json["foldingRangeProvider"]      = true;
+        if (selectionRangeProvider)    json["selectionRangeProvider"]    = true;
+        if (codeActionProvider)        json["codeActionProvider"]        = true;
+        if (workspaceSymbolProvider)   json["workspaceSymbolProvider"]   = true;
+
+        if (codeLensProvider)
+            json["codeLensProvider"] = nlohmann::json{{"resolveProvider", false}};
+        if (documentLinkProvider)
+            json["documentLinkProvider"] = nlohmann::json{{"resolveProvider", false}};
+        if (inlayHintProvider)
+            json["inlayHintProvider"] = true;
+        if (!documentOnTypeFormattingProvider.firstTriggerCharacter.empty()) {
+            json["documentOnTypeFormattingProvider"] = nlohmann::json{
+                {"firstTriggerCharacter", documentOnTypeFormattingProvider.firstTriggerCharacter},
+                {"moreTriggerCharacter",  documentOnTypeFormattingProvider.moreTriggerCharacter},
+            };
+        }
+        if (!executeCommandProvider.commands.empty())
+            json["executeCommandProvider"] = nlohmann::json{{"commands", executeCommandProvider.commands}};
 
         if (!semanticTokensProvider.legend.tokenTypes.empty()) {
             json["semanticTokensProvider"] = semanticTokensProvider.Encode();
         }
 
-        json["workspace"] = workspace.Encode();
 
         return json;
     }
@@ -286,19 +307,49 @@ struct InitializationOptions : public Protocol {};
 
 struct InitializeParams : public WorkDoneProgressParams {
     void Decode(const nlohmann::json &json) override {
-        processId = json["processId"].template get<std::int64_t>();
+        // processId 可为 null（无进程客户端）
+        if (json.contains("processId") && !json["processId"].is_null()) {
+            processId = json["processId"].template get<std::int64_t>();
+        }
 
-        clientInfo.Decode(json["clientInfo"].template get<nlohmann::json>());
+        // clientInfo 是可选字段
+        if (json.contains("clientInfo") && !json["clientInfo"].is_null()) {
+            clientInfo.Decode(json["clientInfo"]);
+        }
 
-        locale = json["locale"].template get<std::string>();
+        // locale 是可选字段
+        if (json.contains("locale") && json["locale"].is_string()) {
+            locale = json["locale"].template get<std::string>();
+        }
 
-        rootPath = json["rootPath"].template get<std::string>();
+        // rootPath 已废弃且可为 null
+        if (json.contains("rootPath") && json["rootPath"].is_string()) {
+            rootPath = json["rootPath"].template get<std::string>();
+        }
 
-        rootUri = json["rootUri"].template get<std::string>();
+        // rootUri 可为 null（LSP 3.17 已用 workspaceFolders 替代）
+        if (json.contains("rootUri") && json["rootUri"].is_string()) {
+            rootUri = json["rootUri"].template get<std::string>();
+        }
 
-        capabilities.Decode(json["capabilities"].template get<nlohmann::json>());
+        // capabilities 是必填项，但防御性检查
+        if (json.contains("capabilities") && !json["capabilities"].is_null()) {
+            capabilities.Decode(json["capabilities"]);
+        }
 
-        trace = json["trace"].template get<std::string>();
+        // trace 是可选字段
+        if (json.contains("trace") && json["trace"].is_string()) {
+            trace = json["trace"].template get<std::string>();
+        }
+
+        // workspaceFolders 是可选字段
+        if (json.contains("workspaceFolders") && json["workspaceFolders"].is_array()) {
+            for (const auto &wf : json["workspaceFolders"]) {
+                WorkspaceFolder folder;
+                folder.Decode(wf);
+                workspaceFolders.push_back(std::move(folder));
+            }
+        }
     }
 
     auto Encode() -> nlohmann::json override {

@@ -13,11 +13,15 @@ struct TextDocumentSyncOptions : public Protocol {
         auto output         = nlohmann::json::object();
         output["openClose"] = openClose;
         output["change"]    = static_cast<int>(change);
+        if (save)
+            output["save"] = nlohmann::json{{"includeText", saveIncludeText}};
         return output;
     }
 
-    bool                 openClose = false;
-    TextDocumentSyncKind change    = TextDocumentSyncKind::None;
+    bool                 openClose{false};
+    TextDocumentSyncKind change{TextDocumentSyncKind::None};
+    bool                 save{false};            // 是否发送 save 通知
+    bool                 saveIncludeText{false}; // save 通知中是否附带文本
 };
 
 struct DidOpenTextDocumentParams : public Protocol {
@@ -110,6 +114,15 @@ struct SaveOptions : public Protocol {
 };
 
 struct RenameParams : public TextDocumentPositionParams, WorkDoneProgressParams {
+    void Decode(const nlohmann::json &input) override {
+        if (input.contains("textDocument"))
+            textDocument.Decode(input["textDocument"]);
+        if (input.contains("position"))
+            position.Decode(input["position"]);
+        if (input.contains("newName") && input["newName"].is_string())
+            newName = input["newName"].template get<std::string>();
+    }
+
     std::string newName;
 };
 }  // namespace lsp

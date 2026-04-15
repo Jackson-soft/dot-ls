@@ -15,6 +15,7 @@
 #include <boost/asio/use_awaitable.hpp>
 #include <boost/pool/object_pool.hpp>
 #include <cstdlib>
+#include <deque>
 #include <format>
 #include <functional>
 #include <memory>
@@ -67,12 +68,33 @@ public:
     }
 
     auto Run() -> boost::asio::awaitable<void> {
-        while (true) {
-            if (auto message = co_await read(); !message.empty()) {
-                dispatch(message);
-                co_await flushTx();
+        try {
+            while (true) {
+                if (auto message = co_await read(); !message.empty()) {
+                    dispatch(message);
+                    co_await flushTx();
+                }
             }
+        } catch (const boost::system::system_error &e) {
+            // 客户端断开（EOF）或 io_context 停止时正常退出，其他错误记录
+            if (e.code() != boost::asio::error::eof
+                && e.code() != boost::asio::error::operation_aborted
+                && e.code() != boost::asio::error::broken_pipe) {
+                std::print(stderr, "[dot-ls] unexpected I/O error: {}\n", e.what());
+            }
+            Close();
         }
+    }
+
+    // ── 服务端主动弹窗 / 日志（window/showMessage, window/logMessage） ──────────
+    // MessageType: 1=Error, 2=Warning, 3=Info, 4=Log
+    void ShowMessage(int type, std::string_view msg) {
+        sendNotification("window/showMessage",
+                         nlohmann::json{{"type", type}, {"message", msg}});
+    }
+    void LogMessage(int type, std::string_view msg) {
+        sendNotification("window/logMessage",
+                         nlohmann::json{{"type", type}, {"message", msg}});
     }
 
     void Close() {
@@ -102,6 +124,18 @@ private:
         return nlohmann::json{{"code", code}, {"message", message}};
     }
 
+    // ── 辅助：发送服务端主动请求（fire-and-forget，不等待响应）──────────────
+    void sendServerRequest(const std::string &method, const nlohmann::json &params) {
+        nlohmann::json req;
+        req["jsonrpc"] = "2.0";
+        req["id"]      = ++serverRequestId_;
+        req["method"]  = method;
+        req["params"]  = params;
+        const std::string body = req.dump();
+        txQueue_.push_back(
+            std::format("{}{}{}{}", lsp::HeaderLen, body.size(), lsp::Delimiter, body));
+    }
+
     // ── 辅助：发送服务端主动通知 ────────────────────────────────────────────────────────
     void sendNotification(const std::string &method, const nlohmann::json &params) {
         nlohmann::json notif;
@@ -109,15 +143,15 @@ private:
         notif["method"]        = method;
         notif["params"]        = params;
         const std::string body = notif.dump();
-        const auto        msg  = std::format("{}{}{}{}", lsp::HeaderLen, body.size(), lsp::Delimiter, body);
-        txBuf_.push(std::span<const char>(msg.data(), msg.size()));
+        txQueue_.push_back(
+            std::format("{}{}{}{}", lsp::HeaderLen, body.size(), lsp::Delimiter, body));
     }
 
-    // ── 将格式化响应追加到发送环形缓冲区 ──────────────────────────────────────
+    // ── 将格式化响应追加到发送队列 ──────────────────────────────────────────────
     void sendResponse(uranus::jsonrpc::Response *output) {
-        const auto msg
-            = std::format("{}{}{}{}", lsp::HeaderLen, output->String().size(), lsp::Delimiter, output->String());
-        txBuf_.push(std::span<const char>(msg.data(), msg.size()));
+        const auto body = output->String();
+        txQueue_.push_back(
+            std::format("{}{}{}{}", lsp::HeaderLen, body.size(), lsp::Delimiter, body));
     }
 
     // ── 辅助：发送错误响应 ────────────────────────────────────────────────────────
@@ -129,14 +163,13 @@ private:
         response_.destroy(output);
     }
 
-    // ── 辅助：将 txBuf_ 中的字节刷入 stdout ──────────────────────────────────────
+    // ── 辅助：将 txQueue_ 中的消息依次刷入 stdout ────────────────────────────
     auto flushTx() -> boost::asio::awaitable<void> {
-        while (!txBuf_.empty()) {
-            const std::size_t toSend = std::min(txBuf_.size(), std::size_t{65536});
-            std::string       chunk(toSend, '\0');
-            txBuf_.copy_out(toSend, chunk.data());
-            txBuf_.consume(toSend);
-            co_await boost::asio::async_write(stdout_, boost::asio::buffer(chunk), boost::asio::use_awaitable);
+        while (!txQueue_.empty()) {
+            const auto &msg = txQueue_.front();
+            co_await boost::asio::async_write(
+                stdout_, boost::asio::buffer(msg), boost::asio::use_awaitable);
+            txQueue_.pop_front();
         }
     }
 
@@ -159,9 +192,6 @@ private:
         });
         handler_.emplace("textDocument/didClose", [app = app_](const nlohmann::json &params) {
             return app->DidClose(params);
-        });
-        handler_.emplace("textDocument/rename", [app = app_](const nlohmann::json &params) {
-            return app->Rename(params);
         });
         handler_.emplace("textDocument/completion", [app = app_](const nlohmann::json &params) {
             return app->Completion(params);
@@ -186,7 +216,7 @@ private:
             return app->Definition(params);
         });
         handler_.emplace("textDocument/references", [app = app_](const nlohmann::json &params) {
-            return app->DocumentHighlight(params);  // reuse highlight as reference list
+            return app->References(params);
         });
         handler_.emplace("textDocument/documentHighlight", [app = app_](const nlohmann::json &params) {
             return app->DocumentHighlight(params);
@@ -194,6 +224,63 @@ private:
         handler_.emplace("textDocument/semanticTokens/full", [app = app_](const nlohmann::json &params) {
             return app->SemanticTokensFull(params);
         });
+        handler_.emplace("textDocument/semanticTokens/range", [app = app_](const nlohmann::json &params) {
+            return app->SemanticTokensRange(params);
+        });
+        handler_.emplace("textDocument/codeAction", [app = app_](const nlohmann::json &params) {
+            return app->CodeAction(params);
+        });
+        handler_.emplace("textDocument/formatting", [app = app_](const nlohmann::json &params) {
+            return app->Formatting(params);
+        });
+        handler_.emplace("textDocument/rangeFormatting", [app = app_](const nlohmann::json &params) {
+            return app->RangeFormatting(params);
+        });
+        handler_.emplace("textDocument/onTypeFormatting", [app = app_](const nlohmann::json &params) {
+            return app->OnTypeFormatting(params);
+        });
+        handler_.emplace("textDocument/documentSymbol", [app = app_](const nlohmann::json &params) {
+            return app->DocumentSymbol(params);
+        });
+        handler_.emplace("textDocument/rename", [app = app_](const nlohmann::json &params) {
+            return app->Rename(params);
+        });
+        handler_.emplace("textDocument/prepareRename", [app = app_](const nlohmann::json &params) {
+            return app->PrepareRename(params);
+        });
+        handler_.emplace("textDocument/foldingRange", [app = app_](const nlohmann::json &params) {
+            return app->FoldingRange(params);
+        });
+        handler_.emplace("textDocument/selectionRange", [app = app_](const nlohmann::json &params) {
+            return app->SelectionRange(params);
+        });
+        handler_.emplace("textDocument/inlayHint", [app = app_](const nlohmann::json &params) {
+            return app->InlayHint(params);
+        });
+        handler_.emplace("textDocument/codeLens", [app = app_](const nlohmann::json &params) {
+            return app->CodeLens(params);
+        });
+        handler_.emplace("codeLens/resolve", [app = app_](const nlohmann::json &params) {
+            return app->CodeLensResolve(params);
+        });
+        handler_.emplace("textDocument/documentLink", [app = app_](const nlohmann::json &params) {
+            return app->DocumentLink(params);
+        });
+        handler_.emplace("documentLink/resolve", [app = app_](const nlohmann::json &params) {
+            return app->DocumentLinkResolve(params);
+        });
+        handler_.emplace("workspace/symbol", [app = app_](const nlohmann::json &params) {
+            return app->WorkspaceSymbol(params);
+        });
+        handler_.emplace("workspace/executeCommand", [app = app_](const nlohmann::json &params) {
+            return app->ExecuteCommand(params);
+        });
+        // ── 协议合规：收到但无需处理的通知 ──────────────────────────────────────
+        for (const auto *noop : {"$/cancelRequest", "$/setTrace", "$/logTrace",
+                                  "workspace/didChangeWatchedFiles",
+                                  "workspace/didChangeConfiguration"}) {
+            handler_.emplace(noop, [](const nlohmann::json &) { return nlohmann::json{}; });
+        }
     }
 
     // ── 读取一条完整的 LSP 消息体 ─────────────────────────────────────────────────
@@ -202,7 +289,12 @@ private:
             // 从 stdin 读取可用字节，追加到接收环形缓冲区
             std::array<char, 4096> tmp{};
             const std::size_t n = co_await stdin_.async_read_some(boost::asio::buffer(tmp), boost::asio::use_awaitable);
-            rxBuf_.push(std::span<const char>(tmp.data(), n));
+            const auto written = rxBuf_.push(std::span<const char>(tmp.data(), n));
+            if (written < n) {
+                std::print(stderr,
+                           "[dot-ls] warn: rx buffer full, {} byte(s) dropped\n",
+                           n - written);
+            }
 
             // 尝试从缓冲区解析完整 LSP 消息
             if (auto msg = tryParseMessage()) {
@@ -288,6 +380,13 @@ private:
                 state_ = State::Running;
             }
 
+            // workspace/executeCommand: 若返回编辑操作则发送 workspace/applyEdit 请求
+            if (method == "workspace/executeCommand" && !result.is_null()
+                && result.contains("edit")) {
+                sendServerRequest("workspace/applyEdit", result);
+                result = nullptr;  // LSP 规范：executeCommand 本身返回 null
+            }
+
             // 仅对有 id 的请求（非通知）发送响应
             if (!isNotification) {
                 const auto output = response_.construct();
@@ -310,6 +409,7 @@ private:
             }
         }
 
+
         request_.destroy(request);
     }
 
@@ -317,11 +417,12 @@ private:
     StdioStream                           stdin_;           // 标准输入
     StdioStream                           stdout_;          // 标准输出
     infra::common::RingBuffer<char>       rxBuf_{1 << 20};  // 1 MB 接收环形缓冲区
-    infra::common::RingBuffer<char>       txBuf_{1 << 20};  // 1 MB 发送环形缓冲区
+    std::deque<std::string>               txQueue_{};        // 发送消息队列（无容量上限）
     std::shared_ptr<application::App>     app_{std::make_shared<application::App>()};
     std::unordered_map<std::string, std::function<nlohmann::json(const nlohmann::json &)>> handler_{};
-    boost::object_pool<uranus::jsonrpc::Request>                                           request_{};   // 请求池
-    boost::object_pool<uranus::jsonrpc::Response>                                          response_{};  // 响应池
-    State state_{State::Uninitialized};                                                                  // 生命周期状态
+    boost::object_pool<uranus::jsonrpc::Request>                                           request_{};
+    boost::object_pool<uranus::jsonrpc::Response>                                          response_{};
+    State state_{State::Uninitialized};
+    int   serverRequestId_{0};  // 服务端主动发起请求的 ID 计数器
 };
 }  // namespace interface
