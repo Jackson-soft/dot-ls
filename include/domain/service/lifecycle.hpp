@@ -17,9 +17,9 @@ public:
         result.serverInfo.version = infra::config::Version;
 
         // 启用文档同步（Full 模式 + save 时附带文本）
-        result.capabilities.textDocumentSync.openClose      = true;
-        result.capabilities.textDocumentSync.change         = lsp::TextDocumentSyncKind::Full;
-        result.capabilities.textDocumentSync.save           = true;
+        result.capabilities.textDocumentSync.openClose       = true;
+        result.capabilities.textDocumentSync.change          = lsp::TextDocumentSyncKind::Full;
+        result.capabilities.textDocumentSync.save            = true;
         result.capabilities.textDocumentSync.saveIncludeText = true;
 
         // 启用代码补全
@@ -84,6 +84,13 @@ public:
             "dot-ls.formatDocument",
             "dot-ls.validate",
         };
+
+        // 启用 Signature Help（属性值上下文：= 触发，[ 重触发）
+        result.capabilities.signatureHelpProvider.triggerCharacters   = {"="};
+        result.capabilities.signatureHelpProvider.retriggerCharacters = {"[", ","};
+
+        // 启用联动编辑（同名标识符同步修改）
+        result.capabilities.linkedEditingRangeProvider = true;
 
         return result;
     }

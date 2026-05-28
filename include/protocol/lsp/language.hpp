@@ -203,10 +203,10 @@ enum class SymbolKind {
 struct DocumentSymbol : public Protocol {
     auto Encode() -> nlohmann::json override {
         nlohmann::json j;
-        j["name"]            = name;
-        j["kind"]            = static_cast<int>(kind);
-        j["range"]           = range.Encode();
-        j["selectionRange"]  = selectionRange.Encode();
+        j["name"]           = name;
+        j["kind"]           = static_cast<int>(kind);
+        j["range"]          = range.Encode();
+        j["selectionRange"] = selectionRange.Encode();
         if (!detail.empty())
             j["detail"] = detail;
         if (!children.empty()) {
@@ -218,12 +218,12 @@ struct DocumentSymbol : public Protocol {
         return j;
     }
 
-    std::string                  name;
-    std::string                  detail;
-    SymbolKind                   kind{SymbolKind::Variable};
-    Range                        range;
-    Range                        selectionRange;
-    std::vector<DocumentSymbol>  children;
+    std::string                 name;
+    std::string                 detail;
+    SymbolKind                  kind{SymbolKind::Variable};
+    Range                       range;
+    Range                       selectionRange;
+    std::vector<DocumentSymbol> children;
 };
 
 struct DocumentSymbolParams : public Protocol {
@@ -279,8 +279,8 @@ struct FoldingRange : public Protocol {
         return j;
     }
 
-    uint32_t        startLine{0};
-    uint32_t        endLine{0};
+    uint32_t         startLine{0};
+    uint32_t         endLine{0};
     FoldingRangeKind kind{FoldingRangeKind::Region};
 };
 
@@ -304,7 +304,7 @@ struct SelectionRange : public Protocol {
         return j;
     }
 
-    Range                        range;
+    Range                           range;
     std::shared_ptr<SelectionRange> parent;
 };
 
@@ -365,7 +365,7 @@ struct CodeActionParams : public Protocol {
 
     TextDocumentIdentifier textDocument;
     Range                  range;
-    CodeActionContext       context;
+    CodeActionContext      context;
 };
 
 // ── Workspace Symbol ──────────────────────────────────────────────────────────
@@ -506,7 +506,7 @@ struct CodeLens : public Protocol {
         return j;
     }
 
-    Range          range;
+    Range           range;
     CodeLensCommand command;
 };
 
@@ -525,8 +525,10 @@ struct DocumentLink : public Protocol {
     auto Encode() -> nlohmann::json override {
         nlohmann::json j;
         j["range"] = range.Encode();
-        if (!target.empty())  j["target"]  = target;
-        if (!tooltip.empty()) j["tooltip"] = tooltip;
+        if (!target.empty())
+            j["target"] = target;
+        if (!tooltip.empty())
+            j["tooltip"] = tooltip;
         return j;
     }
 
@@ -578,6 +580,106 @@ struct ExecuteCommandParams : public Protocol {
 
     std::string                 command;
     std::vector<nlohmann::json> arguments;
+};
+
+// ── SignatureHelp ─────────────────────────────────────────────────────────────
+
+struct SignatureHelpParams : public Protocol {
+    void Decode(const nlohmann::json &input) override {
+        if (input.contains("textDocument"))
+            textDocument.Decode(input["textDocument"]);
+        if (input.contains("position"))
+            position.Decode(input["position"]);
+    }
+
+    TextDocumentIdentifier textDocument;
+    Position               position;
+};
+
+struct ParameterInformation : public Protocol {
+    auto Encode() -> nlohmann::json override {
+        nlohmann::json j;
+        j["label"] = label;
+        if (!documentation.empty())
+            j["documentation"] = documentation;
+        return j;
+    }
+
+    std::string label;
+    std::string documentation;
+};
+
+struct SignatureInformation : public Protocol {
+    auto Encode() -> nlohmann::json override {
+        nlohmann::json j;
+        j["label"] = label;
+        if (!documentation.empty())
+            j["documentation"] = documentation;
+        if (!parameters.empty()) {
+            auto arr = nlohmann::json::array();
+            for (auto &p : parameters)
+                arr.push_back(p.Encode());
+            j["parameters"] = arr;
+        }
+        if (activeParameter.has_value())
+            j["activeParameter"] = *activeParameter;
+        return j;
+    }
+
+    std::string                       label;
+    std::string                       documentation;
+    std::vector<ParameterInformation> parameters;
+    std::optional<uint32_t>           activeParameter;
+};
+
+struct SignatureHelp : public Protocol {
+    auto Encode() -> nlohmann::json override {
+        if (signatures.empty())
+            return nullptr;
+        nlohmann::json j;
+        auto           arr = nlohmann::json::array();
+        for (auto &s : signatures)
+            arr.push_back(s.Encode());
+        j["signatures"] = arr;
+        if (activeSignature.has_value())
+            j["activeSignature"] = *activeSignature;
+        if (activeParameter.has_value())
+            j["activeParameter"] = *activeParameter;
+        return j;
+    }
+
+    std::vector<SignatureInformation> signatures;
+    std::optional<uint32_t>           activeSignature;
+    std::optional<uint32_t>           activeParameter;
+};
+
+// ── LinkedEditingRange ────────────────────────────────────────────────────────
+
+struct LinkedEditingRangeParams : public Protocol {
+    void Decode(const nlohmann::json &input) override {
+        if (input.contains("textDocument"))
+            textDocument.Decode(input["textDocument"]);
+        if (input.contains("position"))
+            position.Decode(input["position"]);
+    }
+
+    TextDocumentIdentifier textDocument;
+    Position               position;
+};
+
+struct LinkedEditingRanges : public Protocol {
+    auto Encode() -> nlohmann::json override {
+        if (ranges.empty())
+            return nullptr;
+        nlohmann::json j;
+        auto           arr = nlohmann::json::array();
+        for (auto &r : ranges)
+            arr.push_back(r.Encode());
+        j["ranges"] = arr;
+        return j;
+    }
+
+    std::vector<Range> ranges;
 };
 
 }  // namespace lsp

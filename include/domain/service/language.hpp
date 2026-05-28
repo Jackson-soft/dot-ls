@@ -22,23 +22,21 @@ public:
     ~Language() = default;
 
     // ── 上下文感知代码补全 ─────────────────────────────────────────────────────
-    auto Completion(const lsp::CompletionParams &param, const std::string &text)
-        -> lsp::CompletionList {
+    auto Completion(const lsp::CompletionParams &param, const std::string &text) -> lsp::CompletionList {
         auto tree = ts_.Parse(text);
-        auto ctx  = infra::parser::TreeSitter::DetectCompletionContext(
-            text,
-            static_cast<uint32_t>(param.position.line),
-            static_cast<uint32_t>(param.position.character));
+        auto ctx  = infra::parser::TreeSitter::DetectCompletionContext(text,
+                                                                      static_cast<uint32_t>(param.position.line),
+                                                                      static_cast<uint32_t>(param.position.character));
 
         switch (ctx.kind) {
-        case infra::parser::CompletionKind::AttributeName:
-            return attrNameCompletions();
-        case infra::parser::CompletionKind::AttributeValue:
-            return attrValueCompletions(ctx.attrName);
-        case infra::parser::CompletionKind::NodeReference:
-            return nodeNameCompletions(tree.get(), text);
-        case infra::parser::CompletionKind::TopLevel:
-            return topLevelCompletions(tree.get(), text);
+            case infra::parser::CompletionKind::AttributeName:
+                return attrNameCompletions();
+            case infra::parser::CompletionKind::AttributeValue:
+                return attrValueCompletions(ctx.attrName);
+            case infra::parser::CompletionKind::NodeReference:
+                return nodeNameCompletions(tree.get(), text);
+            case infra::parser::CompletionKind::TopLevel:
+                return topLevelCompletions(tree.get(), text);
         }
         return {};
     }
@@ -55,6 +53,58 @@ public:
         lsp::Hover result;
         result.contents.kind  = "markdown";
         result.contents.value = it->second;
+        return result;
+    }
+
+    // ── SignatureHelp（属性值上下文：= 触发后列出合法取值）──────────────────
+    auto SignatureHelp(uint32_t line, uint32_t col, const std::string &text) -> lsp::SignatureHelp {
+        auto ctx = infra::parser::TreeSitter::DetectCompletionContext(text, line, col);
+        if (ctx.kind != infra::parser::CompletionKind::AttributeValue || ctx.attrName.empty())
+            return {};
+        auto completions = attrValueCompletions(ctx.attrName);
+        if (completions.items.empty())
+            return {};
+
+        // 构造 signature label: "attrName = val1 | val2 | ..."
+        std::string                            sigLabel = ctx.attrName + " =";
+        std::vector<lsp::ParameterInformation> params;
+        for (const auto &item : completions.items) {
+            sigLabel += " | " + item.label;
+            lsp::ParameterInformation p;
+            p.label = item.label;
+            params.push_back(std::move(p));
+        }
+
+        lsp::SignatureInformation sig;
+        sig.label           = std::move(sigLabel);
+        sig.documentation   = "Valid values for the `" + ctx.attrName + "` attribute";
+        sig.parameters      = std::move(params);
+        sig.activeParameter = 0u;
+
+        lsp::SignatureHelp result;
+        result.signatures.push_back(std::move(sig));
+        result.activeSignature = 0u;
+        result.activeParameter = 0u;
+        return result;
+    }
+
+    // ── LinkedEditingRange（同名标识符联动编辑范围）──────────────────────────
+    auto LinkedEditingRange(uint32_t line, uint32_t col, const std::string &text) -> lsp::LinkedEditingRanges {
+        auto tree  = ts_.Parse(text);
+        auto atPos = ts_.IdentifierAt(tree.get(), text, line, col);
+        if (!atPos)
+            return {};
+        lsp::LinkedEditingRanges result;
+        for (const auto &id : ts_.GetIdentifiers(tree.get(), text)) {
+            if (id.name != atPos->name)
+                continue;
+            lsp::Range r;
+            r.start.line      = id.startLine;
+            r.start.character = id.startChar;
+            r.end.line        = id.startLine;
+            r.end.character   = id.startChar + id.length;
+            result.ranges.push_back(r);
+        }
         return result;
     }
 
@@ -132,8 +182,7 @@ public:
     }
 
     // ── Semantic Tokens（Range 子集）─────────────────────────────────────────
-    auto SemanticTokensRange(const std::string &text, const lsp::Range &range)
-        -> lsp::SemanticTokens {
+    auto SemanticTokensRange(const std::string &text, const lsp::Range &range) -> lsp::SemanticTokens {
         auto tree = ts_.Parse(text);
         auto data = ts_.SemanticTokens(tree.get(), text);
 
@@ -141,6 +190,7 @@ public:
         struct RawTok {
             uint32_t line, col, len, type, mod;
         };
+
         std::vector<RawTok> tokens;
         uint32_t            prevLine = 0, prevChar = 0;
         for (std::size_t i = 0; i + 4 < data.size(); i += 5) {
@@ -161,8 +211,7 @@ public:
         for (const auto &tok : tokens) {
             if (tok.line < startLine || tok.line > endLine)
                 continue;
-            if (tok.line == endLine
-                && tok.col >= static_cast<uint32_t>(range.end.character))
+            if (tok.line == endLine && tok.col >= static_cast<uint32_t>(range.end.character))
                 continue;
             uint32_t dl = tok.line - rPrevLine;
             uint32_t dc = (dl == 0) ? tok.col - rPrevChar : tok.col;
@@ -181,8 +230,8 @@ public:
 
     // ── 文档符号 ─────────────────────────────────────────────────────────────
     auto DocumentSymbols(const std::string &text) -> std::vector<lsp::DocumentSymbol> {
-        auto tree    = ts_.Parse(text);
-        auto entries = ts_.GetDocumentSymbols(tree.get(), text);
+        auto                             tree    = ts_.Parse(text);
+        auto                             entries = ts_.GetDocumentSymbols(tree.get(), text);
         std::vector<lsp::DocumentSymbol> result;
         result.reserve(entries.size());
         for (auto &e : entries)
@@ -206,8 +255,9 @@ public:
     }
 
     // ── 重命名 ─────────────────────────────────────────────────────────────────
-    auto Rename(uint32_t line, uint32_t col, const std::string &uri,
-                const std::string &newName, const std::string &text) -> lsp::WorkspaceEdit {
+    auto
+    Rename(uint32_t line, uint32_t col, const std::string &uri, const std::string &newName, const std::string &text)
+        -> lsp::WorkspaceEdit {
         lsp::WorkspaceEdit edit;
         auto               tree  = ts_.Parse(text);
         const auto         atPos = ts_.IdentifierAt(tree.get(), text, line, col);
@@ -240,7 +290,7 @@ public:
             lsp::FoldingRange fr;
             fr.startLine = e.startLine;
             fr.endLine   = e.endLine;
-            fr.kind = e.isComment ? lsp::FoldingRangeKind::Comment : lsp::FoldingRangeKind::Region;
+            fr.kind      = e.isComment ? lsp::FoldingRangeKind::Comment : lsp::FoldingRangeKind::Region;
             result.push_back(fr);
         }
         return result;
@@ -249,21 +299,22 @@ public:
     // ── 选区扩展 ─────────────────────────────────────────────────────────────
     auto SelectionRanges(const std::vector<lsp::Position> &positions, const std::string &text)
         -> std::vector<lsp::SelectionRange> {
-        auto                              tree = ts_.Parse(text);
-        std::vector<lsp::SelectionRange>  result;
+        auto                             tree = ts_.Parse(text);
+        std::vector<lsp::SelectionRange> result;
         result.reserve(positions.size());
         for (const auto &pos : positions) {
-            auto chain = ts_.GetAncestorChain(
-                tree.get(), static_cast<uint32_t>(pos.line), static_cast<uint32_t>(pos.character));
+            auto                                 chain = ts_.GetAncestorChain(tree.get(),
+                                              static_cast<uint32_t>(pos.line),
+                                              static_cast<uint32_t>(pos.character));
             std::shared_ptr<lsp::SelectionRange> cur;
             for (auto it = chain.rbegin(); it != chain.rend(); ++it) {
-                auto next                      = std::make_shared<lsp::SelectionRange>();
-                next->range.start.line         = it->startLine;
-                next->range.start.character    = it->startChar;
-                next->range.end.line           = it->endLine;
-                next->range.end.character      = it->endChar;
-                next->parent                   = cur;
-                cur                            = next;
+                auto next                   = std::make_shared<lsp::SelectionRange>();
+                next->range.start.line      = it->startLine;
+                next->range.start.character = it->startChar;
+                next->range.end.line        = it->endLine;
+                next->range.end.character   = it->endChar;
+                next->parent                = cur;
+                cur                         = next;
             }
             if (cur) {
                 result.push_back(*cur);
@@ -278,18 +329,17 @@ public:
     }
 
     // ── Code Action（格式化 + 关键字规范化）────────────────────────────────────
-    auto CodeActions(const std::string &uri, const std::string &text,
-                     const lsp::Range & /*range*/) -> nlohmann::json {
+    auto CodeActions(const std::string &uri, const std::string &text, const lsp::Range & /*range*/) -> nlohmann::json {
         nlohmann::json arr = nlohmann::json::array();
 
         infra::formatter::FormattingOptions opts;
-        auto formatted = infra::formatter::DotFormatter::Format(text, opts);
+        auto                                formatted = infra::formatter::DotFormatter::Format(text, opts);
         if (!formatted.empty() && formatted != text) {
             // "Format Document" action
             lsp::WorkspaceEdit edit;
             lsp::TextEdit      te;
-            te.range   = wholeDocRange(text);
-            te.newText = std::move(formatted);
+            te.range          = wholeDocRange(text);
+            te.newText        = std::move(formatted);
             edit.changes[uri] = {std::move(te)};
 
             nlohmann::json action;
@@ -303,10 +353,9 @@ public:
     }
 
     // ── InlayHints（图统计：节点数 + 边数）────────────────────────────────────
-    auto InlayHints(const std::string &text, const lsp::Range &range)
-        -> std::vector<lsp::InlayHint> {
-        auto tree  = ts_.Parse(text);
-        auto stats = ts_.GetGraphStats(tree.get(), text);
+    auto InlayHints(const std::string &text, const lsp::Range &range) -> std::vector<lsp::InlayHint> {
+        auto                        tree  = ts_.Parse(text);
+        auto                        stats = ts_.GetGraphStats(tree.get(), text);
         std::vector<lsp::InlayHint> result;
         if (stats.graphType.empty())
             return result;
@@ -320,10 +369,8 @@ public:
         lsp::InlayHint hint;
         hint.position.line      = stats.headerLine;
         hint.position.character = static_cast<uint64_t>(lines[stats.headerLine].size());
-        hint.label = "  // " + std::to_string(stats.nodeCount) + " node" +
-                     (stats.nodeCount != 1 ? "s" : "") + ", " +
-                     std::to_string(stats.edgeCount) + " edge" +
-                     (stats.edgeCount != 1 ? "s" : "");
+        hint.label = "  // " + std::to_string(stats.nodeCount) + " node" + (stats.nodeCount != 1 ? "s" : "") + ", "
+                   + std::to_string(stats.edgeCount) + " edge" + (stats.edgeCount != 1 ? "s" : "");
         hint.kind        = lsp::InlayHintKind::Parameter;
         hint.paddingLeft = true;
         result.push_back(std::move(hint));
@@ -332,8 +379,8 @@ public:
 
     // ── CodeLens（Validate + Format 按钮）─────────────────────────────────────
     auto CodeLens(const std::string &text) -> std::vector<lsp::CodeLens> {
-        auto tree  = ts_.Parse(text);
-        auto stats = ts_.GetGraphStats(tree.get(), text);
+        auto                       tree  = ts_.Parse(text);
+        auto                       stats = ts_.GetGraphStats(tree.get(), text);
         std::vector<lsp::CodeLens> result;
         if (stats.graphType.empty())
             return result;
@@ -364,8 +411,8 @@ public:
 
     // ── DocumentLinks（image / URL 属性值可点击）──────────────────────────────
     auto DocumentLinks(const std::string &text) -> std::vector<lsp::DocumentLink> {
-        auto tree    = ts_.Parse(text);
-        auto entries = ts_.GetAttributeLinks(tree.get(), text);
+        auto                           tree    = ts_.Parse(text);
+        auto                           entries = ts_.GetAttributeLinks(tree.get(), text);
         std::vector<lsp::DocumentLink> result;
         for (const auto &e : entries) {
             lsp::DocumentLink dl;
@@ -377,9 +424,7 @@ public:
                 dl.target  = e.value;
                 dl.tooltip = "Open URL: " + e.value;
             } else {
-                dl.target  = (e.value.find("://") == std::string::npos)
-                                 ? ("file://" + e.value)
-                                 : e.value;
+                dl.target  = (e.value.find("://") == std::string::npos) ? ("file://" + e.value) : e.value;
                 dl.tooltip = "Open image: " + e.value;
             }
             result.push_back(std::move(dl));
@@ -388,10 +433,11 @@ public:
     }
 
     // ── OnTypeFormatting（输入 } 时重排当前行缩进）───────────────────────────
-    auto OnTypeFormatting(const std::string &text, uint32_t line, uint32_t /*col*/,
-                          const std::string &ch,
-                          const infra::formatter::FormattingOptions &opts)
-        -> std::vector<lsp::TextEdit> {
+    auto OnTypeFormatting(const std::string &text,
+                          uint32_t           line,
+                          uint32_t /*col*/,
+                          const std::string                         &ch,
+                          const infra::formatter::FormattingOptions &opts) -> std::vector<lsp::TextEdit> {
         if (ch != "}" && ch != "\n")
             return {};
         auto formatted = infra::formatter::DotFormatter::Format(text, opts);
@@ -413,16 +459,15 @@ public:
     }
 
     // ── ExecuteCommand（返回 workspace/applyEdit 参数，null 表示无操作）──────
-    auto ExecuteCommand(const std::string &command, const std::string &uri,
-                        const std::string &text) -> nlohmann::json {
+    auto ExecuteCommand(const std::string &command, const std::string &uri, const std::string &text) -> nlohmann::json {
         if (command == "dot-ls.formatDocument") {
             infra::formatter::FormattingOptions opts;
-            auto formatted = infra::formatter::DotFormatter::Format(text, opts);
+            auto                                formatted = infra::formatter::DotFormatter::Format(text, opts);
             if (formatted.empty() || formatted == text)
                 return nullptr;
             lsp::TextEdit edit;
-            edit.range   = wholeDocRange(text);
-            edit.newText = std::move(formatted);
+            edit.range              = wholeDocRange(text);
+            edit.newText            = std::move(formatted);
             nlohmann::json editsArr = nlohmann::json::array();
             editsArr.push_back(edit.Encode());
             nlohmann::json changes;
@@ -446,9 +491,9 @@ public:
     }
 
     // ── 区间格式化 ─────────────────────────────────────────────────────────────
-    auto RangeFormatting(const std::string &text, const lsp::Range &range,
-                         const infra::formatter::FormattingOptions &opts)
-        -> std::vector<lsp::TextEdit> {
+    auto RangeFormatting(const std::string                         &text,
+                         const lsp::Range                          &range,
+                         const infra::formatter::FormattingOptions &opts) -> std::vector<lsp::TextEdit> {
         auto formatted = infra::formatter::DotFormatter::Format(text, opts);
         if (formatted.empty())
             return {};
@@ -458,7 +503,7 @@ public:
         auto endLine   = static_cast<std::size_t>(range.end.line);
         if (startLine >= origLines.size() || startLine >= fmtLines.size())
             return Formatting(text, opts);
-        auto fmtEndLine = std::min(endLine, fmtLines.size() > 0 ? fmtLines.size() - 1 : 0);
+        auto        fmtEndLine = std::min(endLine, fmtLines.size() > 0 ? fmtLines.size() - 1 : 0);
         std::string newText;
         for (std::size_t i = startLine; i <= fmtEndLine; ++i) {
             newText += fmtLines[i];
@@ -501,10 +546,15 @@ private:
     // ── 计算文档末尾位置 ─────────────────────────────────────────────────────
     static auto wholeDocRange(const std::string &text) -> lsp::Range {
         lsp::Range range;
-        range.start       = {0, 0};
+        range.start   = {0, 0};
         uint64_t line = 0, col = 0;
         for (char c : text) {
-            if (c == '\n') { ++line; col = 0; } else { ++col; }
+            if (c == '\n') {
+                ++line;
+                col = 0;
+            } else {
+                ++col;
+            }
         }
         range.end.line      = line;
         range.end.character = col;
@@ -516,8 +566,12 @@ private:
         std::vector<std::string> lines;
         std::string              cur;
         for (char c : text) {
-            if (c == '\n') { lines.push_back(std::move(cur)); cur.clear(); }
-            else if (c != '\r') { cur += c; }
+            if (c == '\n') {
+                lines.push_back(std::move(cur));
+                cur.clear();
+            } else if (c != '\r') {
+                cur += c;
+            }
         }
         if (!cur.empty() || (!text.empty() && text.back() == '\n'))
             lines.push_back(std::move(cur));
@@ -526,7 +580,7 @@ private:
 
     // ── 光标下的单词 ─────────────────────────────────────────────────────────
     static std::string wordAt(const std::string &text, uint32_t line, uint32_t col) {
-        std::string_view sv = text;
+        std::string_view sv  = text;
         uint32_t         cur = 0;
         std::string_view lineView;
         while (!sv.empty()) {
@@ -534,7 +588,10 @@ private:
             std::string_view row = (pos == std::string_view::npos) ? sv : sv.substr(0, pos);
             if (!row.empty() && row.back() == '\r')
                 row.remove_suffix(1);
-            if (cur == line) { lineView = row; break; }
+            if (cur == line) {
+                lineView = row;
+                break;
+            }
             sv.remove_prefix(pos == std::string_view::npos ? sv.size() : pos + 1);
             ++cur;
         }
@@ -544,8 +601,10 @@ private:
             return std::isalnum(static_cast<unsigned char>(c)) || c == '_';
         };
         uint32_t s = col, e = col;
-        while (s > 0 && isIdChar(lineView[s - 1])) --s;
-        while (e < static_cast<uint32_t>(lineView.size()) && isIdChar(lineView[e])) ++e;
+        while (s > 0 && isIdChar(lineView[s - 1]))
+            --s;
+        while (e < static_cast<uint32_t>(lineView.size()) && isIdChar(lineView[e]))
+            ++e;
         return std::string(lineView.substr(s, e - s));
     }
 
@@ -611,38 +670,62 @@ private:
     // ── 属性值补全列表 ────────────────────────────────────────────────────────
     static lsp::CompletionList attrValueCompletions(const std::string &attrName) {
         static const std::unordered_map<std::string, std::vector<std::string>> kValues = {
-            {"shape",      {"box","circle","ellipse","diamond","triangle","plaintext","point",
-                            "record","Mrecord","doublecircle","doubleoctagon","house","pentagon",
-                            "hexagon","octagon","parallelogram","trapezium","egg","none"}},
-            {"style",      {"filled","dashed","dotted","bold","rounded","solid","invis","diagonals"}},
-            {"dir",        {"forward","back","both","none"}},
-            {"rankdir",    {"TB","BT","LR","RL"}},
-            {"rank",       {"same","min","max","source","sink"}},
-            {"arrowhead",  {"normal","vee","dot","odot","none","box","diamond","open","tee","inv"}},
-            {"arrowtail",  {"normal","vee","dot","odot","none","box","diamond","open","tee","inv"}},
-            {"splines",    {"none","line","polyline","curved","ortho","spline"}},
-            {"concentrate",{"true","false"}},
-            {"compound",   {"true","false"}},
-            {"fixedsize",  {"true","false"}},
-            {"constraint", {"true","false"}},
-            {"ordering",   {"out","in"}},
-            {"labeljust",  {"l","c","r"}},
-            {"labelloc",   {"t","b","c"}},
-            {"color",      {"black","white","red","green","blue","yellow","orange","purple","pink",
-                            "brown","gray","cyan","magenta","lightblue","lightgreen","lightyellow",
-                            "lightgray","darkblue","darkgreen","darkred","navy","olive","teal",
-                            "silver","gold","coral","salmon","violet"}},
-            {"fillcolor",  {"black","white","red","green","blue","yellow","orange","purple","pink",
-                            "brown","gray","cyan","magenta","lightblue","lightgreen","lightyellow",
-                            "lightgray","darkblue","darkgreen","darkred","navy","olive","teal",
-                            "silver","gold","coral","salmon","violet"}},
-            {"fontcolor",  {"black","white","red","green","blue","yellow","gray","darkblue"}},
-            {"bgcolor",    {"white","lightgray","lightyellow","lightblue","transparent"}},
-            {"fontname",   {"Helvetica","Arial","Times-Roman","Courier","Courier-Bold","Impact",
-                            "Georgia","\"Helvetica-Bold\""}},
+            {"shape",
+             {"box",
+              "circle",
+              "ellipse",
+              "diamond",
+              "triangle",
+              "plaintext",
+              "point",
+              "record",
+              "Mrecord",
+              "doublecircle",
+              "doubleoctagon",
+              "house",
+              "pentagon",
+              "hexagon",
+              "octagon",
+              "parallelogram",
+              "trapezium",
+              "egg",
+              "none"}},
+            {"style", {"filled", "dashed", "dotted", "bold", "rounded", "solid", "invis", "diagonals"}},
+            {"dir", {"forward", "back", "both", "none"}},
+            {"rankdir", {"TB", "BT", "LR", "RL"}},
+            {"rank", {"same", "min", "max", "source", "sink"}},
+            {"arrowhead", {"normal", "vee", "dot", "odot", "none", "box", "diamond", "open", "tee", "inv"}},
+            {"arrowtail", {"normal", "vee", "dot", "odot", "none", "box", "diamond", "open", "tee", "inv"}},
+            {"splines", {"none", "line", "polyline", "curved", "ortho", "spline"}},
+            {"concentrate", {"true", "false"}},
+            {"compound", {"true", "false"}},
+            {"fixedsize", {"true", "false"}},
+            {"constraint", {"true", "false"}},
+            {"ordering", {"out", "in"}},
+            {"labeljust", {"l", "c", "r"}},
+            {"labelloc", {"t", "b", "c"}},
+            {"color", {"black",      "white",       "red",       "green",    "blue",      "yellow",  "orange",
+                       "purple",     "pink",        "brown",     "gray",     "cyan",      "magenta", "lightblue",
+                       "lightgreen", "lightyellow", "lightgray", "darkblue", "darkgreen", "darkred", "navy",
+                       "olive",      "teal",        "silver",    "gold",     "coral",     "salmon",  "violet"}},
+            {"fillcolor", {"black",      "white",       "red",       "green",    "blue",      "yellow",  "orange",
+                           "purple",     "pink",        "brown",     "gray",     "cyan",      "magenta", "lightblue",
+                           "lightgreen", "lightyellow", "lightgray", "darkblue", "darkgreen", "darkred", "navy",
+                           "olive",      "teal",        "silver",    "gold",     "coral",     "salmon",  "violet"}},
+            {"fontcolor", {"black", "white", "red", "green", "blue", "yellow", "gray", "darkblue"}},
+            {"bgcolor", {"white", "lightgray", "lightyellow", "lightblue", "transparent"}},
+            {"fontname",
+             {"Helvetica",
+              "Arial",
+              "Times-Roman",
+              "Courier",
+              "Courier-Bold",
+              "Impact",
+              "Georgia",
+              "\"Helvetica-Bold\""}},
         };
         lsp::CompletionList result;
-        auto it = kValues.find(attrName);
+        auto                it = kValues.find(attrName);
         if (it != kValues.end()) {
             for (const auto &val : it->second) {
                 lsp::CompletionItem item;
@@ -678,14 +761,14 @@ private:
 
         // ── Snippet 模板 ────────────────────────────────────────────────────
         static const std::vector<std::pair<std::string, std::string>> kSnippets = {
-            {"digraph",  "digraph ${1:G} {\n\t$0\n}"},
-            {"graph",    "graph ${1:G} {\n\t$0\n}"},
+            {"digraph", "digraph ${1:G} {\n\t$0\n}"},
+            {"graph", "graph ${1:G} {\n\t$0\n}"},
             {"subgraph", "subgraph cluster_${1:name} {\n\tlabel=\"${2:cluster}\"\n\t$0\n}"},
-            {"node []",  "node [shape=${1:box}, style=${2:filled}, fillcolor=\"${3:lightblue}\"]\n$0"},
-            {"edge []",  "edge [color=${1:black}, style=${2:solid}]\n$0"},
-            {"->",       "${1:A} -> ${2:B} [label=\"${3}\"]"},
-            {"--",       "${1:A} -- ${2:B}"},
-            {"node stmt","${1:name} [shape=${2:box}, label=\"${3:$1}\"]"},
+            {"node []", "node [shape=${1:box}, style=${2:filled}, fillcolor=\"${3:lightblue}\"]\n$0"},
+            {"edge []", "edge [color=${1:black}, style=${2:solid}]\n$0"},
+            {"->", "${1:A} -> ${2:B} [label=\"${3}\"]"},
+            {"--", "${1:A} -- ${2:B}"},
+            {"node stmt", "${1:name} [shape=${2:box}, label=\"${3:$1}\"]"},
         };
         for (const auto &[label, snippet] : kSnippets) {
             lsp::CompletionItem item;
@@ -733,7 +816,9 @@ private:
             {"fillcolor", "**fillcolor** `colorname`\n\nFill color (requires `style=filled`)."},
             {"bgcolor", "**bgcolor** `colorname`\n\nBackground color."},
             {"shape", "**shape** `shapename`\n\nNode shape: `box` `circle` `ellipse` `diamond` …"},
-            {"style", "**style**\n\nNode: `filled` `dashed` `dotted` `bold` `rounded`.\nEdge: `solid` `dashed` `dotted` `bold` `invis`."},
+            {"style",
+             "**style**\n\nNode: `filled` `dashed` `dotted` `bold` `rounded`.\nEdge: `solid` `dashed` `dotted` `bold` "
+             "`invis`."},
             {"fontname", "**fontname** `font-family`\n\nFont for labels."},
             {"fontsize", "**fontsize** `number`\n\nFont size in points (default: 14)."},
             {"fontcolor", "**fontcolor** `colorname`\n\nLabel font color."},

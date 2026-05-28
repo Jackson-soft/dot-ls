@@ -73,7 +73,9 @@ public:
         return {};
     }
 
-    auto Rename(const lsp::RenameParams &params) -> lsp::Protocol { return {}; }
+    auto Rename(const lsp::RenameParams &params) -> lsp::Protocol {
+        return {};
+    }
 
     // 供其他服务查询单个文档
     [[nodiscard]] auto Get(const std::string &uri) const -> const DocumentEntry * {
@@ -82,8 +84,7 @@ public:
     }
 
     // 遍历所有打开的文档（供 workspace/symbol 等功能使用）
-    [[nodiscard]] auto GetAllEntries() const
-        -> const std::unordered_map<std::string, DocumentEntry> & {
+    [[nodiscard]] auto GetAllEntries() const -> const std::unordered_map<std::string, DocumentEntry> & {
         return store_;
     }
 

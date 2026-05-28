@@ -13,6 +13,7 @@
 #include <string>
 #include <string_view>
 #include <tree_sitter/api.h>
+#include <unordered_map>
 #include <vector>
 
 // DOT 语言 grammar，由 tree-sitter-dot/src/parser.c 提供
@@ -41,6 +42,7 @@ struct IdentifierOccurrence {
 
 // 补全上下文
 enum class CompletionKind { TopLevel, AttributeName, AttributeValue, NodeReference };
+
 struct CompletionInfo {
     CompletionKind kind{CompletionKind::TopLevel};
     std::string    attrName;  // 当 kind == AttributeValue 时有效
@@ -69,8 +71,8 @@ struct AncestorRange {
 // 可点击链接（image / URL 属性值）
 struct LinkEntry {
     uint32_t    startLine, startChar, endLine, endChar;
-    std::string value;    // 原始值（去引号）
-    std::string attrName; // "image" 或 "URL"
+    std::string value;     // 原始值（去引号）
+    std::string attrName;  // "image" 或 "URL"
 };
 
 // 图统计（用于 inlay hint / code lens）
@@ -135,8 +137,7 @@ public:
     }
 
     // ── 语法错误 + 语义诊断 → 诊断列表 ────────────────────────────────────────
-    [[nodiscard]] std::vector<lsp::Diagnostic> GetErrors(const TSTree *tree,
-                                                          std::string_view source) const {
+    [[nodiscard]] std::vector<lsp::Diagnostic> GetErrors(const TSTree *tree, std::string_view source) const {
         std::vector<lsp::Diagnostic> result;
         TSNode                       root = ts_tree_root_node(tree);
 
@@ -159,8 +160,7 @@ public:
             if (ts_node_is_error(node)) {
                 addDiag(node, lsp::DiagnosticSeverity::Error, "Syntax error");
             } else if (ts_node_is_missing(node) && ts_node_is_named(node)) {
-                addDiag(node, lsp::DiagnosticSeverity::Error,
-                        std::string("Missing ") + ts_node_type(node));
+                addDiag(node, lsp::DiagnosticSeverity::Error, std::string("Missing ") + ts_node_type(node));
             }
         });
 
@@ -182,19 +182,42 @@ public:
             walk(root, [&](TSNode node) {
                 if (std::strcmp(ts_node_type(node), "edgeop") != 0)
                     return;
-                auto        s    = ts_node_start_byte(node);
-                auto        e    = ts_node_end_byte(node);
+                auto        s = ts_node_start_byte(node);
+                auto        e = ts_node_end_byte(node);
                 std::string text(source.substr(s, e - s));
                 bool        isArrow = (text == "->");
                 if (isDirected && !isArrow) {
-                    addDiag(node, lsp::DiagnosticSeverity::Error,
-                            "Undirected edge '--' in directed graph; use '->'");
+                    addDiag(node, lsp::DiagnosticSeverity::Error, "Undirected edge '--' in directed graph; use '->'");
                 } else if (!isDirected && isArrow) {
-                    addDiag(node, lsp::DiagnosticSeverity::Error,
-                            "Directed edge '->' in undirected graph; use '--'");
+                    addDiag(node, lsp::DiagnosticSeverity::Error, "Directed edge '->' in undirected graph; use '--'");
                 }
             });
         }
+
+        // ── 语义：同一属性列表中的重复属性名 ─────────────────────────────────
+        walk(root, [&](TSNode node) {
+            if (std::strcmp(ts_node_type(node), "attr_list") != 0)
+                return;
+            // 遍历 attr_list 下所有 attribute 子节点，检测重名
+            std::unordered_map<std::string, bool> seen;
+            uint32_t                              nc = ts_node_named_child_count(node);
+            for (uint32_t i = 0; i < nc; ++i) {
+                TSNode child = ts_node_named_child(node, i);
+                if (std::strcmp(ts_node_type(child), "attribute") != 0)
+                    continue;
+                TSNode nameNode = ts_node_child_by_field_name(child, "name", 4);
+                if (ts_node_is_null(nameNode))
+                    continue;
+                std::string attrName = nodeText(source, nameNode);
+                if (seen.count(attrName)) {
+                    addDiag(child,
+                            lsp::DiagnosticSeverity::Warning,
+                            "Duplicate attribute '" + attrName + "' in attribute list");
+                } else {
+                    seen[attrName] = true;
+                }
+            }
+        });
 
         return result;
     }
@@ -295,8 +318,7 @@ public:
     }
 
     // ── 上下文感知补全：基于光标前文本判断补全类型（无需完整解析树）────────────
-    static CompletionInfo DetectCompletionContext(std::string_view source, uint32_t line,
-                                                   uint32_t col) {
+    static CompletionInfo DetectCompletionContext(std::string_view source, uint32_t line, uint32_t col) {
         // 找到当前行
         std::string_view lineText;
         uint32_t         curLine = 0;
@@ -321,18 +343,16 @@ public:
 
         // ── 边引用上下文：-> 或 -- 之后，还没遇到 [ 或 { ──────────────────────
         {
-            auto arrow = prefix.rfind("->");
-            auto dash  = prefix.rfind("--");
+            auto        arrow = prefix.rfind("->");
+            auto        dash  = prefix.rfind("--");
             std::size_t opEnd = std::string_view::npos;
-            if (arrow != std::string_view::npos
-                && (dash == std::string_view::npos || arrow > dash))
+            if (arrow != std::string_view::npos && (dash == std::string_view::npos || arrow > dash))
                 opEnd = arrow + 2;
             else if (dash != std::string_view::npos)
                 opEnd = dash + 2;
             if (opEnd != std::string_view::npos) {
                 auto after = prefix.substr(opEnd);
-                if (after.find('[') == std::string_view::npos
-                    && after.find('{') == std::string_view::npos)
+                if (after.find('[') == std::string_view::npos && after.find('{') == std::string_view::npos)
                     return {CompletionKind::NodeReference, {}};
             }
         }
@@ -341,8 +361,10 @@ public:
         {
             int depth = 0;
             for (char c : prefix) {
-                if (c == '[') ++depth;
-                else if (c == ']') --depth;
+                if (c == '[')
+                    ++depth;
+                else if (c == ']')
+                    --depth;
             }
             if (depth > 0) {
                 // 找到最后一个未匹配的 [
@@ -350,7 +372,8 @@ public:
                 int         d        = 0;
                 for (std::size_t i = prefix.size(); i > 0; --i) {
                     char c = prefix[i - 1];
-                    if (c == ']') ++d;
+                    if (c == ']')
+                        ++d;
                     else if (c == '[') {
                         if (d == 0) {
                             lastOpen = i;
@@ -361,11 +384,10 @@ public:
                 }
                 auto inside = prefix.substr(lastOpen);
                 // 找当前属性片段（逗号/分号分隔）
-                auto lastComma = inside.rfind(',');
-                auto lastSemi  = inside.rfind(';');
+                auto        lastComma = inside.rfind(',');
+                auto        lastSemi  = inside.rfind(';');
                 std::size_t attrStart = 0;
-                if (lastComma != std::string_view::npos
-                    && (lastSemi == std::string_view::npos || lastComma > lastSemi))
+                if (lastComma != std::string_view::npos && (lastSemi == std::string_view::npos || lastComma > lastSemi))
                     attrStart = lastComma + 1;
                 else if (lastSemi != std::string_view::npos)
                     attrStart = lastSemi + 1;
@@ -388,13 +410,11 @@ public:
     }
 
     // ── 提取文档中所有 node_id 处的唯一标识符（用于补全时建议节点名）────────────
-    [[nodiscard]] std::vector<std::string> GetUniqueNodeNames(const TSTree *tree,
-                                                               std::string_view source) const {
+    [[nodiscard]] std::vector<std::string> GetUniqueNodeNames(const TSTree *tree, std::string_view source) const {
         std::set<std::string> names;
         TSNode                root = ts_tree_root_node(tree);
         walk(root, [&](TSNode node) {
-            if (std::strcmp(ts_node_type(node), "node_id") == 0
-                && ts_node_named_child_count(node) > 0) {
+            if (std::strcmp(ts_node_type(node), "node_id") == 0 && ts_node_named_child_count(node) > 0) {
                 TSNode idNode = ts_node_named_child(node, 0);
                 names.insert(nodeText(source, idNode));
             }
@@ -403,8 +423,7 @@ public:
     }
 
     // ── 文档符号（node_stmt / subgraph 层次结构）───────────────────────────────
-    [[nodiscard]] std::vector<SymbolEntry> GetDocumentSymbols(const TSTree *tree,
-                                                               std::string_view source) const {
+    [[nodiscard]] std::vector<SymbolEntry> GetDocumentSymbols(const TSTree *tree, std::string_view source) const {
         TSNode root = ts_tree_root_node(tree);
 
         // 顶层：graph / digraph 本身
@@ -416,30 +435,31 @@ public:
             for (uint32_t i = 0; i < count; ++i) {
                 TSNode      child = ts_node_child(root, i);
                 const char *t     = ts_node_type(child);
-                if (!ts_node_is_named(child)
-                    && (std::strcmp(t, "graph") == 0 || std::strcmp(t, "digraph") == 0)) {
+                if (!ts_node_is_named(child) && (std::strcmp(t, "graph") == 0 || std::strcmp(t, "digraph") == 0)) {
                     typeName = t;
                 } else if (ts_node_is_named(child) && std::strcmp(t, "id") == 0) {
                     idText = nodeText(source, child);
                 }
             }
-            top.name = typeName.empty() ? "<graph>"
-                                        : (idText.empty() ? typeName : typeName + " " + idText);
+            top.name = typeName.empty() ? "<graph>" : (idText.empty() ? typeName : typeName + " " + idText);
         }
         auto rSp       = ts_node_start_point(root);
         auto rEp       = ts_node_end_point(root);
-        top.startLine  = rSp.row;  top.startChar  = rSp.column;
-        top.endLine    = rEp.row;  top.endChar    = rEp.column;
-        top.selLine    = rSp.row;  top.selChar    = rSp.column;
-        top.selEndLine = rSp.row;  top.selEndChar = rSp.column + static_cast<uint32_t>(top.name.size());
+        top.startLine  = rSp.row;
+        top.startChar  = rSp.column;
+        top.endLine    = rEp.row;
+        top.endChar    = rEp.column;
+        top.selLine    = rSp.row;
+        top.selChar    = rSp.column;
+        top.selEndLine = rSp.row;
+        top.selEndChar = rSp.column + static_cast<uint32_t>(top.name.size());
 
         collectSymbolsFromNode(root, source, top.children);
         return {top};
     }
 
     // ── 折叠范围（block 节点 + 多行注释）────────────────────────────────────────
-    [[nodiscard]] std::vector<FoldingEntry> GetFoldingRanges(const TSTree *tree,
-                                                              std::string_view /*source*/) const {
+    [[nodiscard]] std::vector<FoldingEntry> GetFoldingRanges(const TSTree *tree, std::string_view /*source*/) const {
         std::vector<FoldingEntry> result;
         TSNode                    root = ts_tree_root_node(tree);
         walk(root, [&](TSNode node) {
@@ -460,12 +480,10 @@ public:
     }
 
     // ── 选区扩展链（从光标位置向上遍历 AST）──────────────────────────────────────
-    [[nodiscard]] std::vector<AncestorRange> GetAncestorChain(const TSTree *tree,
-                                                               uint32_t line,
-                                                               uint32_t col) const {
-        TSNode     root  = ts_tree_root_node(tree);
-        TSPoint    pt    = {line, col};
-        TSNode     node  = ts_node_named_descendant_for_point_range(root, pt, pt);
+    [[nodiscard]] std::vector<AncestorRange> GetAncestorChain(const TSTree *tree, uint32_t line, uint32_t col) const {
+        TSNode                     root = ts_tree_root_node(tree);
+        TSPoint                    pt   = {line, col};
+        TSNode                     node = ts_node_named_descendant_for_point_range(root, pt, pt);
         std::vector<AncestorRange> chain;
         while (!ts_node_is_null(node)) {
             auto sp = ts_node_start_point(node);
@@ -477,8 +495,7 @@ public:
     }
 
     // ── 提取 image / URL 属性值（用于 documentLink）──────────────────────────
-    [[nodiscard]] std::vector<LinkEntry> GetAttributeLinks(const TSTree *tree,
-                                                            std::string_view source) const {
+    [[nodiscard]] std::vector<LinkEntry> GetAttributeLinks(const TSTree *tree, std::string_view source) const {
         std::vector<LinkEntry> result;
         TSNode                 root = ts_tree_root_node(tree);
         walk(root, [&](TSNode node) {
@@ -514,8 +531,8 @@ public:
             const char *t     = ts_node_type(child);
             if (!ts_node_is_named(child)) {
                 if (std::strcmp(t, "digraph") == 0 || std::strcmp(t, "graph") == 0) {
-                    stats.graphType = t;
-                    auto sp         = ts_node_start_point(child);
+                    stats.graphType  = t;
+                    auto sp          = ts_node_start_point(child);
                     stats.headerLine = sp.row;
                     stats.headerChar = sp.column;
                 }
@@ -564,8 +581,7 @@ private:
     }
 
     // 从节点（source_file 或 subgraph）中递归收集文档符号
-    void collectSymbolsFromNode(TSNode node, std::string_view source,
-                                std::vector<SymbolEntry> &out) const {
+    void collectSymbolsFromNode(TSNode node, std::string_view source, std::vector<SymbolEntry> &out) const {
         // 找到 block → stmt_list
         TSNode stmtList = findStmtList(node);
         if (ts_node_is_null(stmtList))
@@ -573,7 +589,7 @@ private:
 
         uint32_t count = ts_node_child_count(stmtList);
         for (uint32_t i = 0; i < count; ++i) {
-            TSNode      child = ts_node_child(stmtList, i);
+            TSNode child = ts_node_child(stmtList, i);
             if (!ts_node_is_named(child))
                 continue;
             const char *type = ts_node_type(child);
@@ -581,39 +597,49 @@ private:
             if (std::strcmp(type, "node_stmt") == 0) {
                 // 第一个命名子节点是 node_id
                 if (ts_node_named_child_count(child) > 0) {
-                    TSNode nodeId = ts_node_named_child(child, 0);
-                    auto   nSp   = ts_node_start_point(nodeId);
-                    auto   nEp   = ts_node_end_point(nodeId);
-                    auto   sSp   = ts_node_start_point(child);
-                    auto   sEp   = ts_node_end_point(child);
+                    TSNode      nodeId = ts_node_named_child(child, 0);
+                    auto        nSp    = ts_node_start_point(nodeId);
+                    auto        nEp    = ts_node_end_point(nodeId);
+                    auto        sSp    = ts_node_start_point(child);
+                    auto        sEp    = ts_node_end_point(child);
                     SymbolEntry sym;
                     sym.name       = nodeText(source, nodeId);
                     sym.kind       = 13;  // Variable
-                    sym.startLine  = sSp.row;  sym.startChar  = sSp.column;
-                    sym.endLine    = sEp.row;  sym.endChar    = sEp.column;
-                    sym.selLine    = nSp.row;  sym.selChar    = nSp.column;
-                    sym.selEndLine = nEp.row;  sym.selEndChar = nEp.column;
+                    sym.startLine  = sSp.row;
+                    sym.startChar  = sSp.column;
+                    sym.endLine    = sEp.row;
+                    sym.endChar    = sEp.column;
+                    sym.selLine    = nSp.row;
+                    sym.selChar    = nSp.column;
+                    sym.selEndLine = nEp.row;
+                    sym.selEndChar = nEp.column;
                     out.push_back(std::move(sym));
                 }
             } else if (std::strcmp(type, "subgraph") == 0) {
                 // subgraph 节点，可能有 id 字段
-                TSNode idNode = ts_node_child_by_field_name(child, "id", 2);
-                auto   sSp   = ts_node_start_point(child);
-                auto   sEp   = ts_node_end_point(child);
+                TSNode      idNode = ts_node_child_by_field_name(child, "id", 2);
+                auto        sSp    = ts_node_start_point(child);
+                auto        sEp    = ts_node_end_point(child);
                 SymbolEntry sym;
                 sym.kind      = 3;  // Namespace
-                sym.startLine = sSp.row; sym.startChar = sSp.column;
-                sym.endLine   = sEp.row; sym.endChar   = sEp.column;
+                sym.startLine = sSp.row;
+                sym.startChar = sSp.column;
+                sym.endLine   = sEp.row;
+                sym.endChar   = sEp.column;
                 if (!ts_node_is_null(idNode)) {
                     auto nSp       = ts_node_start_point(idNode);
                     auto nEp       = ts_node_end_point(idNode);
                     sym.name       = nodeText(source, idNode);
-                    sym.selLine    = nSp.row; sym.selChar    = nSp.column;
-                    sym.selEndLine = nEp.row; sym.selEndChar = nEp.column;
+                    sym.selLine    = nSp.row;
+                    sym.selChar    = nSp.column;
+                    sym.selEndLine = nEp.row;
+                    sym.selEndChar = nEp.column;
                 } else {
                     sym.name       = "<subgraph>";
-                    sym.selLine    = sSp.row; sym.selChar    = sSp.column;
-                    sym.selEndLine = sSp.row; sym.selEndChar = sSp.column;
+                    sym.selLine    = sSp.row;
+                    sym.selChar    = sSp.column;
+                    sym.selEndLine = sSp.row;
+                    sym.selEndChar = sSp.column;
                 }
                 // 递归收集子图内部符号
                 collectSymbolsFromNode(child, source, sym.children);
@@ -632,13 +658,11 @@ private:
                 uint32_t bc = ts_node_child_count(child);
                 for (uint32_t j = 0; j < bc; ++j) {
                     TSNode bchild = ts_node_child(child, j);
-                    if (ts_node_is_named(bchild)
-                        && std::strcmp(ts_node_type(bchild), "stmt_list") == 0) {
+                    if (ts_node_is_named(bchild) && std::strcmp(ts_node_type(bchild), "stmt_list") == 0) {
                         return bchild;
                     }
                 }
-            } else if (ts_node_is_named(child)
-                       && std::strcmp(ts_node_type(child), "stmt_list") == 0) {
+            } else if (ts_node_is_named(child) && std::strcmp(ts_node_type(child), "stmt_list") == 0) {
                 return child;
             }
         }

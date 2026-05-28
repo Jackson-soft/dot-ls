@@ -53,11 +53,9 @@ class Server {
 public:
     explicit Server(boost::asio::io_context &ioCtx)
 #ifdef _WIN32
-        : stdin_(ioCtx, ::GetStdHandle(STD_INPUT_HANDLE)),
-          stdout_(ioCtx, ::GetStdHandle(STD_OUTPUT_HANDLE))
+        : stdin_(ioCtx, ::GetStdHandle(STD_INPUT_HANDLE)), stdout_(ioCtx, ::GetStdHandle(STD_OUTPUT_HANDLE))
 #else
-        : stdin_(ioCtx, ::dup(STDIN_FILENO)),
-          stdout_(ioCtx, ::dup(STDOUT_FILENO))
+        : stdin_(ioCtx, ::dup(STDIN_FILENO)), stdout_(ioCtx, ::dup(STDOUT_FILENO))
 #endif
     {
         enroll();
@@ -77,8 +75,7 @@ public:
             }
         } catch (const boost::system::system_error &e) {
             // 客户端断开（EOF）或 io_context 停止时正常退出，其他错误记录
-            if (e.code() != boost::asio::error::eof
-                && e.code() != boost::asio::error::operation_aborted
+            if (e.code() != boost::asio::error::eof && e.code() != boost::asio::error::operation_aborted
                 && e.code() != boost::asio::error::broken_pipe) {
                 std::print(stderr, "[dot-ls] unexpected I/O error: {}\n", e.what());
             }
@@ -89,12 +86,11 @@ public:
     // ── 服务端主动弹窗 / 日志（window/showMessage, window/logMessage） ──────────
     // MessageType: 1=Error, 2=Warning, 3=Info, 4=Log
     void ShowMessage(int type, std::string_view msg) {
-        sendNotification("window/showMessage",
-                         nlohmann::json{{"type", type}, {"message", msg}});
+        sendNotification("window/showMessage", nlohmann::json{{"type", type}, {"message", msg}});
     }
+
     void LogMessage(int type, std::string_view msg) {
-        sendNotification("window/logMessage",
-                         nlohmann::json{{"type", type}, {"message", msg}});
+        sendNotification("window/logMessage", nlohmann::json{{"type", type}, {"message", msg}});
     }
 
     void Close() {
@@ -127,13 +123,12 @@ private:
     // ── 辅助：发送服务端主动请求（fire-and-forget，不等待响应）──────────────
     void sendServerRequest(const std::string &method, const nlohmann::json &params) {
         nlohmann::json req;
-        req["jsonrpc"] = "2.0";
-        req["id"]      = ++serverRequestId_;
-        req["method"]  = method;
-        req["params"]  = params;
+        req["jsonrpc"]         = "2.0";
+        req["id"]              = ++serverRequestId_;
+        req["method"]          = method;
+        req["params"]          = params;
         const std::string body = req.dump();
-        txQueue_.push_back(
-            std::format("{}{}{}{}", lsp::HeaderLen, body.size(), lsp::Delimiter, body));
+        txQueue_.push_back(std::format("{}{}{}{}", lsp::HeaderLen, body.size(), lsp::Delimiter, body));
     }
 
     // ── 辅助：发送服务端主动通知 ────────────────────────────────────────────────────────
@@ -143,15 +138,13 @@ private:
         notif["method"]        = method;
         notif["params"]        = params;
         const std::string body = notif.dump();
-        txQueue_.push_back(
-            std::format("{}{}{}{}", lsp::HeaderLen, body.size(), lsp::Delimiter, body));
+        txQueue_.push_back(std::format("{}{}{}{}", lsp::HeaderLen, body.size(), lsp::Delimiter, body));
     }
 
     // ── 将格式化响应追加到发送队列 ──────────────────────────────────────────────
     void sendResponse(uranus::jsonrpc::Response *output) {
         const auto body = output->String();
-        txQueue_.push_back(
-            std::format("{}{}{}{}", lsp::HeaderLen, body.size(), lsp::Delimiter, body));
+        txQueue_.push_back(std::format("{}{}{}{}", lsp::HeaderLen, body.size(), lsp::Delimiter, body));
     }
 
     // ── 辅助：发送错误响应 ────────────────────────────────────────────────────────
@@ -167,8 +160,7 @@ private:
     auto flushTx() -> boost::asio::awaitable<void> {
         while (!txQueue_.empty()) {
             const auto &msg = txQueue_.front();
-            co_await boost::asio::async_write(
-                stdout_, boost::asio::buffer(msg), boost::asio::use_awaitable);
+            co_await boost::asio::async_write(stdout_, boost::asio::buffer(msg), boost::asio::use_awaitable);
             txQueue_.pop_front();
         }
     }
@@ -275,11 +267,21 @@ private:
         handler_.emplace("workspace/executeCommand", [app = app_](const nlohmann::json &params) {
             return app->ExecuteCommand(params);
         });
+        handler_.emplace("textDocument/signatureHelp", [app = app_](const nlohmann::json &params) {
+            return app->SignatureHelp(params);
+        });
+        handler_.emplace("textDocument/linkedEditingRange", [app = app_](const nlohmann::json &params) {
+            return app->LinkedEditingRange(params);
+        });
         // ── 协议合规：收到但无需处理的通知 ──────────────────────────────────────
-        for (const auto *noop : {"$/cancelRequest", "$/setTrace", "$/logTrace",
-                                  "workspace/didChangeWatchedFiles",
-                                  "workspace/didChangeConfiguration"}) {
-            handler_.emplace(noop, [](const nlohmann::json &) { return nlohmann::json{}; });
+        for (const auto *noop : {"$/cancelRequest",
+                                 "$/setTrace",
+                                 "$/logTrace",
+                                 "workspace/didChangeWatchedFiles",
+                                 "workspace/didChangeConfiguration"}) {
+            handler_.emplace(noop, [](const nlohmann::json &) {
+                return nlohmann::json{};
+            });
         }
     }
 
@@ -289,11 +291,9 @@ private:
             // 从 stdin 读取可用字节，追加到接收环形缓冲区
             std::array<char, 4096> tmp{};
             const std::size_t n = co_await stdin_.async_read_some(boost::asio::buffer(tmp), boost::asio::use_awaitable);
-            const auto written = rxBuf_.push(std::span<const char>(tmp.data(), n));
+            const auto        written = rxBuf_.push(std::span<const char>(tmp.data(), n));
             if (written < n) {
-                std::print(stderr,
-                           "[dot-ls] warn: rx buffer full, {} byte(s) dropped\n",
-                           n - written);
+                std::print(stderr, "[dot-ls] warn: rx buffer full, {} byte(s) dropped\n", n - written);
             }
 
             // 尝试从缓冲区解析完整 LSP 消息
@@ -381,8 +381,7 @@ private:
             }
 
             // workspace/executeCommand: 若返回编辑操作则发送 workspace/applyEdit 请求
-            if (method == "workspace/executeCommand" && !result.is_null()
-                && result.contains("edit")) {
+            if (method == "workspace/executeCommand" && !result.is_null() && result.contains("edit")) {
                 sendServerRequest("workspace/applyEdit", result);
                 result = nullptr;  // LSP 规范：executeCommand 本身返回 null
             }
@@ -409,20 +408,29 @@ private:
             }
         }
 
+        // 文档关闭后清除该文档的诊断信息
+        if (method == "textDocument/didClose") {
+            const auto &p = request->Params();
+            if (p.contains("textDocument") && p["textDocument"].contains("uri")) {
+                sendNotification(
+                    "textDocument/publishDiagnostics",
+                    nlohmann::json{{"uri", p["textDocument"]["uri"]}, {"diagnostics", nlohmann::json::array()}});
+            }
+        }
 
         request_.destroy(request);
     }
 
     // ── 成员 ──────────────────────────────────────────────────────────────────────
-    StdioStream                           stdin_;           // 标准输入
-    StdioStream                           stdout_;          // 标准输出
-    infra::common::RingBuffer<char>       rxBuf_{1 << 20};  // 1 MB 接收环形缓冲区
-    std::deque<std::string>               txQueue_{};        // 发送消息队列（无容量上限）
-    std::shared_ptr<application::App>     app_{std::make_shared<application::App>()};
+    StdioStream                       stdin_;           // 标准输入
+    StdioStream                       stdout_;          // 标准输出
+    infra::common::RingBuffer<char>   rxBuf_{1 << 20};  // 1 MB 接收环形缓冲区
+    std::deque<std::string>           txQueue_{};       // 发送消息队列（无容量上限）
+    std::shared_ptr<application::App> app_{std::make_shared<application::App>()};
     std::unordered_map<std::string, std::function<nlohmann::json(const nlohmann::json &)>> handler_{};
     boost::object_pool<uranus::jsonrpc::Request>                                           request_{};
     boost::object_pool<uranus::jsonrpc::Response>                                          response_{};
-    State state_{State::Uninitialized};
-    int   serverRequestId_{0};  // 服务端主动发起请求的 ID 计数器
+    State                                                                                  state_{State::Uninitialized};
+    int serverRequestId_{0};  // 服务端主动发起请求的 ID 计数器
 };
 }  // namespace interface

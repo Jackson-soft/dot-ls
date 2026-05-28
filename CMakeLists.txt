@@ -5,10 +5,10 @@ project(dot-ls LANGUAGES C CXX)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # ── Dependencies ──────────────────────────────────────────────────────────────
-find_package(Boost    REQUIRED)
+find_package(Boost REQUIRED)
 find_package(nlohmann_json REQUIRED)
-find_package(tree-sitter   REQUIRED)
-find_package(spdlog   REQUIRED)
+find_package(tree-sitter REQUIRED)
+find_package(spdlog REQUIRED)
 
 # ── DOT tree-sitter grammar (C, compiled as a small static library) ────────────
 add_library(ts_dot STATIC tree-sitter-dot/src/parser.c)
@@ -22,37 +22,37 @@ target_include_directories(ts_dot PRIVATE tree-sitter-dot/src)
 add_library(project_options INTERFACE)
 
 target_include_directories(project_options
-    INTERFACE
+        INTERFACE
         ${PROJECT_SOURCE_DIR}/include
         ${PROJECT_SOURCE_DIR}/third_party/uranus/include)
 
 target_link_libraries(project_options
-    INTERFACE
+        INTERFACE
         nlohmann_json::nlohmann_json
         tree-sitter::tree-sitter)
 
 # ── Platform-specific flags (applied once, inherited by all targets) ─────────
-if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+if (CMAKE_SYSTEM_NAME STREQUAL "Darwin")
     message(STATUS "Configuring on/for macOS")
     target_compile_options(project_options INTERFACE -fexperimental-library)
-    target_link_options(project_options    INTERFACE -fexperimental-library)
-elseif(CMAKE_SYSTEM_NAME MATCHES "Windows")
+    target_link_options(project_options INTERFACE -fexperimental-library)
+elseif (CMAKE_SYSTEM_NAME MATCHES "Windows")
     target_compile_definitions(project_options INTERFACE _WIN32_WINNT=0x0601)
-endif()
+endif ()
 
 # ── Main executable ──────────────────────────────────────────────────────────
 add_executable(${PROJECT_NAME} src/main.cpp)
 
 target_link_libraries(${PROJECT_NAME}
-    PRIVATE
+        PRIVATE
         project_options
         ts_dot
         boost::boost
         spdlog::spdlog)
 
-if(CMAKE_SYSTEM_NAME MATCHES "Linux")
+if (CMAKE_SYSTEM_NAME MATCHES "Linux")
     target_link_options(${PROJECT_NAME} PRIVATE -flto=auto -static-libgcc -static-libstdc++ -static)
-endif()
+endif ()
 
 # ── Tests ────────────────────────────────────────────────────────────────────
 enable_testing()
@@ -61,7 +61,7 @@ find_package(Catch2 REQUIRED)
 add_executable(my_test test/main.cpp)
 
 target_link_libraries(my_test
-    PRIVATE
+        PRIVATE
         project_options
         ts_dot
         Catch2::Catch2WithMain)

@@ -187,21 +187,36 @@ struct ServerCapabilities : public Protocol {
 
         json["completionProvider"] = completionProvider.Encode();
 
-        if (hoverProvider)             json["hoverProvider"]             = true;
-        if (declarationProvider)       json["declarationProvider"]       = true;
-        if (definitionProvider)        json["definitionProvider"]        = true;
-        if (typeDefinitionProvider)    json["typeDefinitionProvider"]    = true;
-        if (implementationProvider)    json["implementationProvider"]    = true;
-        if (documentHighlightProvider) json["documentHighlightProvider"] = true;
-        if (referencesProvider)        json["referencesProvider"]        = true;
-        if (documentFormattingProvider)      json["documentFormattingProvider"]      = true;
-        if (documentRangeFormattingProvider) json["documentRangeFormattingProvider"] = true;
-        if (documentSymbolProvider)    json["documentSymbolProvider"]    = true;
-        if (renameProvider)            json["renameProvider"]            = true;
-        if (foldingRangeProvider)      json["foldingRangeProvider"]      = true;
-        if (selectionRangeProvider)    json["selectionRangeProvider"]    = true;
-        if (codeActionProvider)        json["codeActionProvider"]        = true;
-        if (workspaceSymbolProvider)   json["workspaceSymbolProvider"]   = true;
+        if (hoverProvider)
+            json["hoverProvider"] = true;
+        if (declarationProvider)
+            json["declarationProvider"] = true;
+        if (definitionProvider)
+            json["definitionProvider"] = true;
+        if (typeDefinitionProvider)
+            json["typeDefinitionProvider"] = true;
+        if (implementationProvider)
+            json["implementationProvider"] = true;
+        if (documentHighlightProvider)
+            json["documentHighlightProvider"] = true;
+        if (referencesProvider)
+            json["referencesProvider"] = true;
+        if (documentFormattingProvider)
+            json["documentFormattingProvider"] = true;
+        if (documentRangeFormattingProvider)
+            json["documentRangeFormattingProvider"] = true;
+        if (documentSymbolProvider)
+            json["documentSymbolProvider"] = true;
+        if (renameProvider)
+            json["renameProvider"] = true;
+        if (foldingRangeProvider)
+            json["foldingRangeProvider"] = true;
+        if (selectionRangeProvider)
+            json["selectionRangeProvider"] = true;
+        if (codeActionProvider)
+            json["codeActionProvider"] = true;
+        if (workspaceSymbolProvider)
+            json["workspaceSymbolProvider"] = true;
 
         if (codeLensProvider)
             json["codeLensProvider"] = nlohmann::json{{"resolveProvider", false}};
@@ -212,7 +227,7 @@ struct ServerCapabilities : public Protocol {
         if (!documentOnTypeFormattingProvider.firstTriggerCharacter.empty()) {
             json["documentOnTypeFormattingProvider"] = nlohmann::json{
                 {"firstTriggerCharacter", documentOnTypeFormattingProvider.firstTriggerCharacter},
-                {"moreTriggerCharacter",  documentOnTypeFormattingProvider.moreTriggerCharacter},
+                {"moreTriggerCharacter", documentOnTypeFormattingProvider.moreTriggerCharacter},
             };
         }
         if (!executeCommandProvider.commands.empty())
@@ -222,6 +237,12 @@ struct ServerCapabilities : public Protocol {
             json["semanticTokensProvider"] = semanticTokensProvider.Encode();
         }
 
+        if (!signatureHelpProvider.triggerCharacters.empty()) {
+            json["signatureHelpProvider"] = signatureHelpProvider.Encode();
+        }
+
+        if (linkedEditingRangeProvider)
+            json["linkedEditingRangeProvider"] = true;
 
         return json;
     }

@@ -80,8 +80,7 @@ public:
         if (!result)
             return nullptr;
         // 返回 { range, placeholder }
-        return nlohmann::json{{"range", result->first.Encode()},
-                              {"placeholder", result->second}};
+        return nlohmann::json{{"range", result->first.Encode()}, {"placeholder", result->second}};
     }
 
     // textDocument/documentSymbol
@@ -180,9 +179,9 @@ public:
         if (!doc)
             return nullptr;
         auto           locs = language_->References(static_cast<uint32_t>(input.position.line),
-                                                     static_cast<uint32_t>(input.position.character),
-                                                     input.textDocument.uri,
-                                                     doc->text);
+                                          static_cast<uint32_t>(input.position.character),
+                                          input.textDocument.uri,
+                                          doc->text);
         nlohmann::json arr  = nlohmann::json::array();
         for (auto &loc : locs)
             arr.push_back(loc.Encode());
@@ -295,12 +294,12 @@ public:
             .tabSize      = input.options.tabSize,
             .insertSpaces = input.options.insertSpaces,
         };
-        auto edits = language_->OnTypeFormatting(
-            doc->text,
-            static_cast<uint32_t>(input.position.line),
-            static_cast<uint32_t>(input.position.character),
-            input.ch, opts);
-        nlohmann::json arr = nlohmann::json::array();
+        auto           edits = language_->OnTypeFormatting(doc->text,
+                                                 static_cast<uint32_t>(input.position.line),
+                                                 static_cast<uint32_t>(input.position.character),
+                                                 input.ch,
+                                                 opts);
+        nlohmann::json arr   = nlohmann::json::array();
         for (auto &e : edits)
             arr.push_back(e.Encode());
         return arr;
@@ -390,6 +389,34 @@ public:
         return arr;
     }
 
+    // ── textDocument/signatureHelp ────────────────────────────────────────────
+    auto SignatureHelp(const nlohmann::json &params) -> nlohmann::json {
+        lsp::SignatureHelpParams input;
+        input.Decode(params);
+        const auto *doc = document_->Get(input.textDocument.uri);
+        if (!doc)
+            return nullptr;
+        return language_
+            ->SignatureHelp(static_cast<uint32_t>(input.position.line),
+                            static_cast<uint32_t>(input.position.character),
+                            doc->text)
+            .Encode();
+    }
+
+    // ── textDocument/linkedEditingRange ───────────────────────────────────────
+    auto LinkedEditingRange(const nlohmann::json &params) -> nlohmann::json {
+        lsp::LinkedEditingRangeParams input;
+        input.Decode(params);
+        const auto *doc = document_->Get(input.textDocument.uri);
+        if (!doc)
+            return nullptr;
+        return language_
+            ->LinkedEditingRange(static_cast<uint32_t>(input.position.line),
+                                 static_cast<uint32_t>(input.position.character),
+                                 doc->text)
+            .Encode();
+    }
+
 private:
     std::unique_ptr<domain::service::Lifecycle> lifecycle_{std::make_unique<domain::service::Lifecycle>()};
     std::unique_ptr<domain::service::Language>  language_{std::make_unique<domain::service::Language>()};
@@ -397,17 +424,16 @@ private:
 
     // 递归将 DocumentSymbol 层次展平为 SymbolInformation（供 workspace/symbol 使用）
     static void flattenSymbols(const std::vector<lsp::DocumentSymbol> &syms,
-                               const std::string &uri, const std::string &query,
-                               nlohmann::json &out) {
+                               const std::string                      &uri,
+                               const std::string                      &query,
+                               nlohmann::json                         &out) {
         for (auto sym : syms) {  // 按值拷贝以调用非 const Encode()
-            bool match = query.empty()
-                         || sym.name.find(query) != std::string::npos;
+            bool match = query.empty() || sym.name.find(query) != std::string::npos;
             if (match) {
                 nlohmann::json info;
                 info["name"]     = sym.name;
                 info["kind"]     = static_cast<int>(sym.kind);
-                info["location"] = nlohmann::json{{"uri", uri},
-                                                  {"range", sym.range.Encode()}};
+                info["location"] = nlohmann::json{{"uri", uri}, {"range", sym.range.Encode()}};
                 out.push_back(std::move(info));
             }
             flattenSymbols(sym.children, uri, query, out);
