@@ -156,6 +156,18 @@ public:
         return arr;
     }
 
+    auto TypeDefinition(const nlohmann::json &params) -> nlohmann::json {
+        return Definition(params);
+    }
+
+    auto Implementation(const nlohmann::json &params) -> nlohmann::json {
+        return Definition(params);
+    }
+
+    auto Declaration(const nlohmann::json &params) -> nlohmann::json {
+        return Definition(params);
+    }
+
     auto DocumentHighlight(const nlohmann::json &params) -> nlohmann::json {
         lsp::DocumentHighlightParams input;
         input.Decode(params);

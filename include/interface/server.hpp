@@ -205,7 +205,13 @@ private:
             return app->Definition(params);
         });
         handler_.emplace("textDocument/declaration", [app = app_](const nlohmann::json &params) {
-            return app->Definition(params);
+            return app->Declaration(params);
+        });
+        handler_.emplace("textDocument/typeDefinition", [app = app_](const nlohmann::json &params) {
+            return app->TypeDefinition(params);
+        });
+        handler_.emplace("textDocument/implementation", [app = app_](const nlohmann::json &params) {
+            return app->Implementation(params);
         });
         handler_.emplace("textDocument/references", [app = app_](const nlohmann::json &params) {
             return app->References(params);

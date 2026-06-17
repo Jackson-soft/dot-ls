@@ -207,8 +207,12 @@ struct ServerCapabilities : public Protocol {
             json["documentRangeFormattingProvider"] = true;
         if (documentSymbolProvider)
             json["documentSymbolProvider"] = true;
-        if (renameProvider)
-            json["renameProvider"] = true;
+        if (renameProvider) {
+            if (renamePrepareProvider)
+                json["renameProvider"] = nlohmann::json{{"prepareProvider", true}};
+            else
+                json["renameProvider"] = true;
+        }
         if (foldingRangeProvider)
             json["foldingRangeProvider"] = true;
         if (selectionRangeProvider)
@@ -219,9 +223,9 @@ struct ServerCapabilities : public Protocol {
             json["workspaceSymbolProvider"] = true;
 
         if (codeLensProvider)
-            json["codeLensProvider"] = nlohmann::json{{"resolveProvider", false}};
+            json["codeLensProvider"] = nlohmann::json{{"resolveProvider", codeLensResolveProvider}};
         if (documentLinkProvider)
-            json["documentLinkProvider"] = nlohmann::json{{"resolveProvider", false}};
+            json["documentLinkProvider"] = nlohmann::json{{"resolveProvider", documentLinkResolveProvider}};
         if (inlayHintProvider)
             json["inlayHintProvider"] = true;
         if (!documentOnTypeFormattingProvider.firstTriggerCharacter.empty()) {
@@ -262,12 +266,15 @@ struct ServerCapabilities : public Protocol {
     bool                            documentSymbolProvider          = false;
     bool                            codeActionProvider              = false;
     bool                            codeLensProvider                = false;
+    bool                            codeLensResolveProvider         = false;
     bool                            documentLinkProvider            = false;
+    bool                            documentLinkResolveProvider     = false;
     bool                            colorProvider                   = false;
     bool                            documentFormattingProvider      = false;
     bool                            documentRangeFormattingProvider = false;
     DocumentOnTypeFormattingOptions documentOnTypeFormattingProvider;
-    bool                            renameProvider       = false;
+    bool                            renameProvider        = false;
+    bool                            renamePrepareProvider = false;
     bool                            foldingRangeProvider = false;
     ExecuteCommandOptions           executeCommandProvider;
     bool                            selectionRangeProvider     = false;

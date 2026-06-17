@@ -1,5 +1,6 @@
 #include "infra/formatter/dot_formatter.hpp"
 #include "infra/parser/tree_sitter_adapter.hpp"
+#include "domain/service/lifecycle.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 #include <string>
@@ -70,6 +71,40 @@ TEST_CASE("formatter: final newline added", "[formatter]") {
     auto result = infra::formatter::DotFormatter::Format(src, opts);
     REQUIRE_FALSE(result.empty());
     REQUIRE(result.back() == '\n');
+}
+
+TEST_CASE("lifecycle: advertise typeDefinition capability", "[lsp][capability]") {
+    domain::service::Lifecycle lifecycle;
+    lsp::InitializeParams      params;
+    auto                       result = lifecycle.Initialize(params);
+    REQUIRE(result.capabilities.typeDefinitionProvider);
+}
+
+TEST_CASE("lifecycle: advertise implementation capability", "[lsp][capability]") {
+    domain::service::Lifecycle lifecycle;
+    lsp::InitializeParams      params;
+    auto                       result = lifecycle.Initialize(params);
+    REQUIRE(result.capabilities.implementationProvider);
+}
+
+TEST_CASE("lifecycle: advertise prepareRename capability", "[lsp][capability]") {
+    domain::service::Lifecycle lifecycle;
+    lsp::InitializeParams      params;
+    auto                       result  = lifecycle.Initialize(params);
+    auto                       capsJson = result.capabilities.Encode();
+    REQUIRE(capsJson.contains("renameProvider"));
+    REQUIRE(capsJson["renameProvider"].is_object());
+    REQUIRE(capsJson["renameProvider"]["prepareProvider"].template get<bool>());
+}
+
+TEST_CASE("lifecycle: advertise resolve providers consistently", "[lsp][capability]") {
+    domain::service::Lifecycle lifecycle;
+    lsp::InitializeParams      params;
+    auto                       result  = lifecycle.Initialize(params);
+    auto                       capsJson = result.capabilities.Encode();
+    REQUIRE(result.capabilities.completionProvider.resolveProvider);
+    REQUIRE(capsJson["codeLensProvider"]["resolveProvider"].template get<bool>());
+    REQUIRE(capsJson["documentLinkProvider"]["resolveProvider"].template get<bool>());
 }
 
 // ── TreeSitter 新功能测试 ──────────────────────────────────────────────────────
@@ -255,4 +290,3 @@ TEST_CASE("diagnostics: valid digraph has no errors", "[diag]") {
     auto                      diags = ts.GetErrors(tree.get(), kSrc);
     REQUIRE(diags.empty());
 }
-

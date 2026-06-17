@@ -23,15 +23,17 @@ public:
         result.capabilities.textDocumentSync.saveIncludeText = true;
 
         // 启用代码补全
-        result.capabilities.completionProvider.resolveProvider   = false;
+        result.capabilities.completionProvider.resolveProvider   = true;
         result.capabilities.completionProvider.triggerCharacters = {".", "[", "="};
 
         // 启用 Hover
         result.capabilities.hoverProvider = true;
 
-        // 启用 Definition / Declaration
-        result.capabilities.definitionProvider  = true;
-        result.capabilities.declarationProvider = true;
+        // 启用 Definition / Declaration / TypeDefinition / Implementation
+        result.capabilities.definitionProvider     = true;
+        result.capabilities.declarationProvider    = true;
+        result.capabilities.typeDefinitionProvider = true;
+        result.capabilities.implementationProvider = true;
 
         // 启用 Document Highlight
         result.capabilities.documentHighlightProvider = true;
@@ -47,7 +49,8 @@ public:
         result.capabilities.documentSymbolProvider = true;
 
         // 启用重命名
-        result.capabilities.renameProvider = true;
+        result.capabilities.renameProvider        = true;
+        result.capabilities.renamePrepareProvider = true;
 
         // 启用折叠范围
         result.capabilities.foldingRangeProvider = true;
@@ -67,10 +70,12 @@ public:
         result.capabilities.workspaceSymbolProvider = true;
 
         // 启用 Code Lens
-        result.capabilities.codeLensProvider = true;
+        result.capabilities.codeLensProvider        = true;
+        result.capabilities.codeLensResolveProvider = true;
 
         // 启用 Document Link
-        result.capabilities.documentLinkProvider = true;
+        result.capabilities.documentLinkProvider        = true;
+        result.capabilities.documentLinkResolveProvider = true;
 
         // 启用 Inlay Hint
         result.capabilities.inlayHintProvider = true;
