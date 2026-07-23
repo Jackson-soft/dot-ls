@@ -31,6 +31,23 @@ target_link_libraries(project_options
         nlohmann_json::nlohmann_json
         tree-sitter::tree-sitter)
 
+# ── Warnings ──────────────────────────────────────────────────────────────────
+# Previously the project built with no warning flags at all. Enable the usual
+# baseline so obvious mistakes (unused variables, sign-compare, shadowing, …)
+# surface at compile time instead of silently shipping.
+target_compile_options(project_options INTERFACE -Wall -Wextra -Wpedantic)
+
+# ── Sanitizers (opt-in) ───────────────────────────────────────────────────────
+# Off by default to keep normal Debug/Release builds fast; enable explicitly
+# for local debugging or CI hardening runs, e.g.:
+#   cmake --preset conan-debug -DDOT_LS_ENABLE_SANITIZERS=ON
+option(DOT_LS_ENABLE_SANITIZERS "Build with AddressSanitizer + UndefinedBehaviorSanitizer" OFF)
+if (DOT_LS_ENABLE_SANITIZERS)
+    message(STATUS "Sanitizers enabled: address,undefined")
+    target_compile_options(project_options INTERFACE -fsanitize=address,undefined -fno-omit-frame-pointer)
+    target_link_options(project_options INTERFACE -fsanitize=address,undefined)
+endif ()
+
 # ── Platform-specific flags (applied once, inherited by all targets) ─────────
 if (CMAKE_SYSTEM_NAME STREQUAL "Darwin")
     message(STATUS "Configuring on/for macOS")
@@ -58,7 +75,7 @@ endif ()
 enable_testing()
 find_package(Catch2 REQUIRED)
 
-add_executable(my_test test/main.cpp)
+add_executable(my_test test/language_server_test.cpp)
 
 target_link_libraries(my_test
         PRIVATE

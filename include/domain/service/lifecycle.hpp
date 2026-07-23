@@ -11,14 +11,14 @@ public:
     Lifecycle()  = default;
     ~Lifecycle() = default;
 
-    auto Initialize(const lsp::InitializeParams &param) -> lsp::InitializeResult {
+    auto Initialize(const lsp::InitializeParams & /*param*/) -> lsp::InitializeResult {
         lsp::InitializeResult result;
         result.serverInfo.name    = infra::config::Name;
         result.serverInfo.version = infra::config::Version;
 
-        // 启用文档同步（Full 模式 + save 时附带文本）
+        // 启用文档同步（Incremental 模式，减少大文件下每次编辑的传输/处理开销；save 时附带文本）
         result.capabilities.textDocumentSync.openClose       = true;
-        result.capabilities.textDocumentSync.change          = lsp::TextDocumentSyncKind::Full;
+        result.capabilities.textDocumentSync.change          = lsp::TextDocumentSyncKind::Incremental;
         result.capabilities.textDocumentSync.save            = true;
         result.capabilities.textDocumentSync.saveIncludeText = true;
 

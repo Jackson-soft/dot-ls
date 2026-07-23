@@ -22,7 +22,7 @@ struct Protocol {
         return nlohmann::json::object();
     }
 
-    virtual void Decode(const nlohmann::json &input) {}
+    virtual void Decode(const nlohmann::json & /*input*/) {}
 };
 
 struct RegularExpressionsClientCapabilities : public Protocol {
@@ -202,6 +202,7 @@ struct TextDocumentContentChangeEvent : public Protocol {
         text = input["text"].template get<std::string>();
         if (input.contains("range")) {
             range.Decode(input["range"]);
+            hasRange = true;
         }
         if (input.contains("rangeLength")) {
             rangeLength = input["rangeLength"].template get<std::uint64_t>();
@@ -209,6 +210,7 @@ struct TextDocumentContentChangeEvent : public Protocol {
     }
 
     Range         range;
+    bool          hasRange{false};  // true 表示增量编辑（携带 range），false 表示整篇替换
     std::uint64_t rangeLength{0};
     std::string   text;
 };

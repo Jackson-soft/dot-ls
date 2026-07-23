@@ -341,15 +341,25 @@ private:
     }
 
     // ── 分发并处理一条消息（同步；响应写入 txBuf_，由 flushTx() 统一刷出） ──────────
+    // RAII 守卫：确保 Request 对象无论正常返回、提前 return 还是异常抛出，都会被归还对象池，
+    // 避免早期实现中"抛异常路径下 request_.destroy 被跳过"导致的 object_pool 泄漏。
+    struct RequestGuard {
+        boost::object_pool<uranus::jsonrpc::Request> &pool;
+        uranus::jsonrpc::Request                     *req;
+        ~RequestGuard() {
+            pool.destroy(req);
+        }
+    };
+
     void dispatch(const std::string &body) {
-        const auto request = request_.construct();
+        const auto  request = request_.construct();
+        RequestGuard guard{request_, request};
 
         if (!request->Parse(body)) {
             // 解析失败：-32700 ParseError
             // 无法确定 id，按规范返回 null id
             const uranus::jsonrpc::Id nullId{nullptr};
             sendError(nullId, -32700, "Parse error");
-            request_.destroy(request);
             return;
         }
 
@@ -364,7 +374,6 @@ private:
             if (!isNotification) {
                 sendError(id, -32002, "Server not initialized");
             }
-            request_.destroy(request);
             return;
         }
 
@@ -373,58 +382,69 @@ private:
             if (!isNotification) {
                 sendError(id, -32600, "Invalid request: server is shutting down");
             }
-            request_.destroy(request);
             return;
         }
 
         // ── 查找并调用处理器 ──────────────────────────────────────────────────────
-        if (const auto it = handler_.find(method); it != handler_.end()) {
-            auto result = it->second(request->Params());
+        // handler 内部会解析/反序列化客户端传入的任意 JSON（字段缺失、类型不符等），
+        // 一旦抛出异常需要转换为 JSON-RPC 错误响应，而不是让异常穿透协程导致整个进程崩溃。
+        try {
+            if (const auto it = handler_.find(method); it != handler_.end()) {
+                auto result = it->second(request->Params());
 
-            // initialize 成功后推进状态
-            if (method == "initialize") {
-                state_ = State::Running;
+                // initialize 成功后推进状态
+                if (method == "initialize") {
+                    state_ = State::Running;
+                }
+
+                // workspace/executeCommand: 若返回编辑操作则发送 workspace/applyEdit 请求
+                if (method == "workspace/executeCommand" && !result.is_null() && result.contains("edit")) {
+                    sendServerRequest("workspace/applyEdit", result);
+                    result = nullptr;  // LSP 规范：executeCommand 本身返回 null
+                }
+
+                // 仅对有 id 的请求（非通知）发送响应
+                if (!isNotification) {
+                    const auto output = response_.construct();
+                    output->SetId(id);
+                    output->SetResult(result);
+                    sendResponse(output);
+                    response_.destroy(output);
+                }
+            } else if (!isNotification) {
+                // 未知方法：-32601 MethodNotFound
+                sendError(id, -32601, "Method not found: " + method);
             }
 
-            // workspace/executeCommand: 若返回编辑操作则发送 workspace/applyEdit 请求
-            if (method == "workspace/executeCommand" && !result.is_null() && result.contains("edit")) {
-                sendServerRequest("workspace/applyEdit", result);
-                result = nullptr;  // LSP 规范：executeCommand 本身返回 null
+            // 文档变更后推送诊断（在 request 销毁前调用，method / Params() 此时仍有效）
+            if (method == "textDocument/didOpen" || method == "textDocument/didChange"
+                || method == "textDocument/didSave") {
+                const auto diagParams = app_->Diagnose(request->Params());
+                if (!diagParams.is_null()) {
+                    sendNotification("textDocument/publishDiagnostics", diagParams);
+                }
             }
 
-            // 仅对有 id 的请求（非通知）发送响应
+            // 文档关闭后清除该文档的诊断信息
+            if (method == "textDocument/didClose") {
+                const auto &p = request->Params();
+                if (p.contains("textDocument") && p["textDocument"].contains("uri")) {
+                    sendNotification(
+                        "textDocument/publishDiagnostics",
+                        nlohmann::json{{"uri", p["textDocument"]["uri"]}, {"diagnostics", nlohmann::json::array()}});
+                }
+            }
+        } catch (const std::exception &e) {
+            std::print(stderr, "[dot-ls] handler exception for method '{}': {}\n", method, e.what());
             if (!isNotification) {
-                const auto output = response_.construct();
-                output->SetId(id);
-                output->SetResult(result);
-                sendResponse(output);
-                response_.destroy(output);
+                sendError(id, -32603, std::string("Internal error: ") + e.what());
             }
-        } else if (!isNotification) {
-            // 未知方法：-32601 MethodNotFound
-            sendError(id, -32601, "Method not found: " + method);
-        }
-
-        // 文档变更后推送诊断（在 request 销毁前调用，method / Params() 此时仍有效）
-        if (method == "textDocument/didOpen" || method == "textDocument/didChange"
-            || method == "textDocument/didSave") {
-            const auto diagParams = app_->Diagnose(request->Params());
-            if (!diagParams.is_null()) {
-                sendNotification("textDocument/publishDiagnostics", diagParams);
+        } catch (...) {
+            std::print(stderr, "[dot-ls] unknown exception for method '{}'\n", method);
+            if (!isNotification) {
+                sendError(id, -32603, "Internal error");
             }
         }
-
-        // 文档关闭后清除该文档的诊断信息
-        if (method == "textDocument/didClose") {
-            const auto &p = request->Params();
-            if (p.contains("textDocument") && p["textDocument"].contains("uri")) {
-                sendNotification(
-                    "textDocument/publishDiagnostics",
-                    nlohmann::json{{"uri", p["textDocument"]["uri"]}, {"diagnostics", nlohmann::json::array()}});
-            }
-        }
-
-        request_.destroy(request);
     }
 
     // ── 成员 ──────────────────────────────────────────────────────────────────────

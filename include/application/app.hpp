@@ -24,7 +24,7 @@ public:
         return lifecycle_->Initialize(input).Encode();
     }
 
-    auto Initialized(const nlohmann::json &params) -> nlohmann::json {
+    auto Initialized(const nlohmann::json & /*params*/) -> nlohmann::json {
         return nlohmann::json::object();
     }
 
