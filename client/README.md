@@ -1,36 +1,33 @@
 # DOT-LS LSP 测试客户端使用指南
 
-## 改进的客户端功能
+## 客户端功能
 
 ### 1. 主要文件
 
-- `client.lua` - 完整的 LSP 测试客户端
-- `interactive_test.lua` - 交互式测试脚本  
-- `json.lua` - 自定义 JSON 编码器（无需外部依赖）
-- `run_test.sh` - 自动化测试脚本
-- `test_config.lua` - 测试配置文件
+- `client.lua` - 底层管道测试客户端（通过 stdio 直接与 dot-ls 交互）
+- `test_completion.lua` - 补全功能测试套件
+- `test_document.lua` - 文档生命周期测试套件（didOpen/didChange/didSave/didClose）
+- `run_test.sh` - 自动化测试入口脚本
 
 ### 2. 使用方法
 
-#### 运行完整测试序列：
-```bash
-cd /Users/yalla/code/cpp/dot-ls/client
-lua client.lua
-```
-
-#### 运行交互式测试：
-```bash
-cd /Users/yalla/code/cpp/dot-ls/client
-lua interactive_test.lua
-```
-
-#### 使用自动化脚本：
+#### 使用自动化脚本（推荐）：
 ```bash
 cd /Users/yalla/code/cpp/dot-ls
-./client/run_test.sh              # 默认测试
-./client/run_test.sh interactive  # 交互式测试
-./client/run_test.sh performance  # 性能测试
+./client/run_test.sh              # 默认：运行 completion + document 测试套件
+./client/run_test.sh completion   # 仅运行补全测试
+./client/run_test.sh document     # 仅运行文档协议测试
+./client/run_test.sh performance  # 性能测试（补全测试跑 5 次并计时）
+./client/run_test.sh help         # 显示帮助
 ```
+
+#### 直接运行单个 Lua 脚本：
+```bash
+cd /Users/yalla/code/cpp/dot-ls/client
+lua test_completion.lua ../build/Debug/dot-ls
+lua test_document.lua   ../build/Debug/dot-ls
+```
+
 
 ### 3. 测试内容
 
@@ -100,7 +97,8 @@ digraph G {
 
 ### 7. 扩展测试
 
-要添加更多测试用例，可以修改 `client.lua` 中的 `run_test_sequence` 函数，添加新的 LSP 方法调用。
+要添加更多测试用例，可以在 `test_completion.lua` 或 `test_document.lua` 中按照现有的测试用例
+（`check(...)` / `assert_true(...)` 断言模式）添加新的 LSP 方法调用与校验逻辑。
 
 ### 8. 预期结果
 

@@ -1,5 +1,11 @@
 cmake_minimum_required(VERSION 3.28)
 
+# CMP0167: use the upstream BoostConfig.cmake (as provided by Conan) instead
+# of CMake's removed FindBoost module.
+if (POLICY CMP0167)
+    cmake_policy(SET CMP0167 NEW)
+endif ()
+
 project(dot-ls LANGUAGES C CXX)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)

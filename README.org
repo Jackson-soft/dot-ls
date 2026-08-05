@@ -1,2 +1,30 @@
-# dot-ls
-dot language server
+* dot-ls
+
+Graphviz DOT 语言的 Language Server（LSP），基于 tree-sitter 解析，通过 stdio 与编辑器通信。
+
+** 构建
+
+依赖通过 [[https://conan.io/][Conan 2]] 管理（Boost、nlohmann_json、tree-sitter、spdlog、Catch2）。
+
+#+begin_src sh
+make debug   # conan install（Debug）
+make config  # cmake --preset conan-debug
+make target  # cmake --build build --preset conan-debug
+# 或者一步到位：
+make all
+#+end_src
+
+Release 构建对应使用 =make release=（其余步骤仍走同一套 CMake preset）。
+
+** 运行测试
+
+#+begin_src sh
+ctest --preset conan-debug --output-on-failure
+# 或直接运行测试可执行文件
+./build/Debug/my_test --success
+#+end_src
+
+** 运行
+
+编辑器 / 客户端通过 stdio 启动生成的 =build/Debug/dot-ls= 可执行文件即可，参见 [[file:client/README.md][client/README.md]]
+获取基于 Lua 的手动测试客户端用法。

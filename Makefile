@@ -1,7 +1,9 @@
-all:
+.PHONY: all release debug config target
+
+all: debug config target
 
 release:
-	conan install conanfile.txt -b=missing -u
+	conan install conanfile.txt -b=missing -u -s build_type=Release
 
 debug:
 	conan install conanfile.txt -b=missing -u -s build_type=Debug

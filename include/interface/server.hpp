@@ -80,6 +80,16 @@ public:
                 std::print(stderr, "[dot-ls] unexpected I/O error: {}\n", e.what());
             }
             Close();
+        } catch (const std::exception &e) {
+            // 防御性兜底：co_spawn(..., boost::asio::detached) 会静默丢弃从协程逃逸的
+            // 异常（既不 terminate 也不记录），导致进程无声无息地退出。任何未被
+            // dispatch() 内部 try/catch 捕获的异常（例如消息头解析失败）都必须在这里
+            // 落地记录，否则客户端只会看到连接被莫名关闭，没有任何诊断信息。
+            std::print(stderr, "[dot-ls] unexpected error, server stopping: {}\n", e.what());
+            Close();
+        } catch (...) {
+            std::print(stderr, "[dot-ls] unknown unexpected error, server stopping\n");
+            Close();
         }
     }
 
@@ -294,17 +304,29 @@ private:
     // ── 读取一条完整的 LSP 消息体 ─────────────────────────────────────────────────
     auto read() -> boost::asio::awaitable<std::string> {
         while (true) {
-            // 从 stdin 读取可用字节，追加到接收环形缓冲区
+            // 反复尝试从缓冲区解析：上一次 async_read_some 可能已经一次性读入了多条
+            // 流水线消息（客户端连续发送 didOpen/didChange 等被合并进同一次系统调用
+            // 读取的情况很常见），或者刚跳过一段畸形头部后，缓冲区里可能立刻就暴露出
+            // 下一条完整消息。tryParseMessage() 每次至多消费一段坏数据或一条消息，
+            // 因此只要它让缓冲区变小（取得了进展），就必须继续重试，而不能想当然地
+            // 转去阻塞读取新字节——那样会让已经缓冲好的消息永远等不到处理时机
+            // （客户端往往要等服务端先响应，才会发送下一条消息，从而造成永久卡死）。
+            for (;;) {
+                const auto sizeBefore = rxBuf_.size();
+                if (auto msg = tryParseMessage()) {
+                    co_return std::move(*msg);
+                }
+                if (rxBuf_.size() == sizeBefore) {
+                    break;  // 没有取得任何进展：确实需要更多字节才能继续
+                }
+            }
+
+            // 缓冲区中没有完整消息，才真正阻塞读取更多字节
             std::array<char, 4096> tmp{};
             const std::size_t n = co_await stdin_.async_read_some(boost::asio::buffer(tmp), boost::asio::use_awaitable);
             const auto        written = rxBuf_.push(std::span<const char>(tmp.data(), n));
             if (written < n) {
                 std::print(stderr, "[dot-ls] warn: rx buffer full, {} byte(s) dropped\n", n - written);
-            }
-
-            // 尝试从缓冲区解析完整 LSP 消息
-            if (auto msg = tryParseMessage()) {
-                co_return std::move(*msg);
             }
         }
     }
@@ -326,7 +348,20 @@ private:
             rxBuf_.consume(delimPos + kDelim.size());  // 跳过格式错误的头部
             return std::nullopt;
         }
-        const std::size_t bodyLen = std::stoul(header.substr(prefixPos + lsp::HeaderLen.size()));
+
+        // std::stoul 在值非数字 / 超出范围时会抛出 std::invalid_argument /
+        // std::out_of_range。此处若不捕获，异常会从 read() 一路逃逸到
+        // co_spawn(..., boost::asio::detached) 的协程边界——detached 会静默丢弃
+        // 该异常，既不 terminate 也不记录任何日志，导致整个 server 进程无声退出。
+        // 因此必须像格式错误的头部一样，将其当作坏消息跳过并继续读取。
+        std::size_t bodyLen = 0;
+        try {
+            bodyLen = std::stoul(header.substr(prefixPos + lsp::HeaderLen.size()));
+        } catch (const std::exception &e) {
+            std::print(stderr, "[dot-ls] warn: invalid Content-Length header, skipping: {}\n", e.what());
+            rxBuf_.consume(delimPos + kDelim.size());  // 跳过格式错误的头部
+            return std::nullopt;
+        }
 
         // body 尚未完全到达，继续读
         if (rxBuf_.size() < delimPos + kDelim.size() + bodyLen)
