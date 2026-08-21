@@ -430,14 +430,12 @@ public:
     auto ColorPresentations(const std::string &text, const lsp::Color &color, const lsp::Range &range)
         -> std::vector<lsp::ColorPresentation> {
         // 通过范围起始位置判断该属性值原来是否带引号：range 覆盖整个属性值节点，
-        // 若原值带引号，range 对应的源码文本首字符即为 '"'。
-        auto     lines = splitLines(text);
-        uint32_t line  = static_cast<uint32_t>(range.start.line);
-        bool     quoted = false;
-        if (line < lines.size()) {
-            uint32_t byteCol = infra::common::Utf16ToUtf8Byte(lines[line], static_cast<uint32_t>(range.start.character));
-            quoted           = byteCol < lines[line].size() && lines[line][byteCol] == '"';
-        }
+        // 若原值带引号，range 对应的源码文本首字符即为 '"'。仅取所需的单行文本
+        // （而非像 splitLines 那样切分整篇文档），避免大文件下不必要的开销。
+        uint32_t line     = static_cast<uint32_t>(range.start.line);
+        auto     lineText = infra::common::LineTextAt(text, line);
+        uint32_t byteCol  = infra::common::Utf16ToUtf8Byte(lineText, static_cast<uint32_t>(range.start.character));
+        bool     quoted   = byteCol < lineText.size() && lineText[byteCol] == '"';
         return catalog::ColorPresentations(color, quoted);
     }
 

@@ -477,10 +477,11 @@ inline std::optional<lsp::Color> TryParseColor(const std::string &raw) {
 
     std::string lower = detail::toLower(value);
 
-    // grayNN / greyNN（0..100 灰度百分比）
+    // grayNN / greyNN（0..100 灰度百分比）；限制位数避免 stoi 对超长数字串抛出
+    // std::out_of_range（例如恶意/畸形输入 "gray99999999999999999999"）。
     if (lower.rfind("gray", 0) == 0 || lower.rfind("grey", 0) == 0) {
         std::string suffix = lower.substr(4);
-        if (!suffix.empty()
+        if (!suffix.empty() && suffix.size() <= 3
             && std::all_of(suffix.begin(), suffix.end(), [](unsigned char c) { return std::isdigit(c); })) {
             int        level = std::clamp(std::stoi(suffix), 0, 100);
             double     v     = level / 100.0;
@@ -531,15 +532,22 @@ inline std::vector<lsp::ColorPresentation> ColorPresentations(const lsp::Color &
     hexPresentation.label = wrap(hex);
     result.push_back(std::move(hexPresentation));
 
-    // 精确匹配到命名颜色时，附加该名字作为候选（不影响 hex 始终可用）
+    // 精确匹配到命名颜色时，附加该名字作为候选（不影响 hex 始终可用）。
+    // 多个名字可能对应同一 RGB（如 green/lime、aqua/cyan、navy/navyblue、gray/grey），
+    // unordered_map 的遍历顺序是实现细节而非有意为之的优先级，这里收集全部匹配项后按
+    // 字典序取最小者，保证结果确定、可复现（恰好也让 green/gray/navy 等更常用的别名胜出）。
     if (a >= 255) {
+        std::optional<std::string> best;
         for (const auto &[name, rgb] : NamedColorTable()) {
             if (rgb[0] == r && rgb[1] == g && rgb[2] == b) {
-                lsp::ColorPresentation namedPresentation;
-                namedPresentation.label = wrap(name);
-                result.push_back(std::move(namedPresentation));
-                break;
+                if (!best || name < *best)
+                    best = name;
             }
+        }
+        if (best) {
+            lsp::ColorPresentation namedPresentation;
+            namedPresentation.label = wrap(*best);
+            result.push_back(std::move(namedPresentation));
         }
     }
     return result;

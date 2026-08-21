@@ -350,6 +350,26 @@ TEST_CASE("document color: grayNN percentage parsed", "[color]") {
     REQUIRE(color->blue == Catch::Approx(0.5));
 }
 
+TEST_CASE("document color: overlong grayNNN digit string does not throw", "[color]") {
+    // 曾经直接调用 std::stoi(suffix)，对超长数字串会抛出 std::out_of_range；
+    // 现在应安全地判定为无法解析的颜色（而非抛出异常）。
+    REQUIRE_NOTHROW([] {
+        auto color = domain::service::catalog::TryParseColor("gray99999999999999999999");
+        REQUIRE_FALSE(color.has_value());
+    }());
+}
+
+TEST_CASE("document color: named lookup is deterministic for duplicate RGB", "[color]") {
+    // green 和 lime 在 X11 方案下 RGB 相同 (0,255,0)；反查应稳定返回字典序最小者。
+    lsp::Color color;
+    color.red = 0.0; color.green = 1.0; color.blue = 0.0; color.alpha = 1.0;
+    auto p1 = domain::service::catalog::ColorPresentations(color, false);
+    auto p2 = domain::service::catalog::ColorPresentations(color, false);
+    REQUIRE(p1.size() == p2.size());
+    REQUIRE(p1.back().label == p2.back().label);
+    REQUIRE(p1.back().label == "green");
+}
+
 TEST_CASE("document color: HSV triple parsed", "[color]") {
     auto color = domain::service::catalog::TryParseColor("0.0 1.0 1.0");
     REQUIRE(color.has_value());
