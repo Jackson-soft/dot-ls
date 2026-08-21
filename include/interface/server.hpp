@@ -289,6 +289,12 @@ private:
         handler_.emplace("textDocument/linkedEditingRange", [app = app_](const nlohmann::json &params) {
             return app->LinkedEditingRange(params);
         });
+        handler_.emplace("textDocument/documentColor", [app = app_](const nlohmann::json &params) {
+            return app->DocumentColor(params);
+        });
+        handler_.emplace("textDocument/colorPresentation", [app = app_](const nlohmann::json &params) {
+            return app->ColorPresentation(params);
+        });
         // ── 协议合规：收到但无需处理的通知 ──────────────────────────────────────
         for (const auto *noop : {"$/cancelRequest",
                                  "$/setTrace",

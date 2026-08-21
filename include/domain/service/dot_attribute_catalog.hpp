@@ -12,6 +12,13 @@
 #include "infra/parser/tree_sitter_adapter.hpp"
 #include "protocol/lsp/language.hpp"
 
+#include <algorithm>
+#include <array>
+#include <cctype>
+#include <cmath>
+#include <cstdio>
+#include <optional>
+#include <sstream>
 #include <string>
 #include <string_view>
 #include <tree_sitter/api.h>
@@ -271,6 +278,271 @@ inline const std::unordered_map<std::string, std::string> &HoverDocs() {
         {"pos", "**pos** `x,y | x,y!`\n\nNode position."},
     };
     return docs;
+}
+
+// ── 颜色支持（documentColor / colorPresentation）──────────────────────────────
+//
+// Graphviz 默认使用 X11 颜色方案。绝大多数颜色名在 X11 / SVG(CSS) 方案下取值一致，
+// 但少数几个名字（green / gray|grey / maroon / purple）两套方案的 RGB 不同，这里
+// 按 X11（即 Graphviz 默认行为）取值，与 graphviz.org/doc/info/colors.html 一致。
+inline const std::unordered_map<std::string, std::array<int, 3>> &NamedColorTable() {
+    static const std::unordered_map<std::string, std::array<int, 3>> table = {
+        {"aliceblue", {240, 248, 255}},       {"antiquewhite", {250, 235, 215}},
+        {"aqua", {0, 255, 255}},              {"aquamarine", {127, 255, 212}},
+        {"azure", {240, 255, 255}},           {"beige", {245, 245, 220}},
+        {"bisque", {255, 228, 196}},          {"black", {0, 0, 0}},
+        {"blanchedalmond", {255, 235, 205}},  {"blue", {0, 0, 255}},
+        {"blueviolet", {138, 43, 226}},       {"brown", {165, 42, 42}},
+        {"burlywood", {222, 184, 135}},       {"cadetblue", {95, 158, 160}},
+        {"chartreuse", {127, 255, 0}},        {"chocolate", {210, 105, 30}},
+        {"coral", {255, 127, 80}},            {"cornflowerblue", {100, 149, 237}},
+        {"cornsilk", {255, 248, 220}},        {"crimson", {220, 20, 60}},
+        {"cyan", {0, 255, 255}},              {"darkblue", {0, 0, 139}},
+        {"darkcyan", {0, 139, 139}},          {"darkgoldenrod", {184, 134, 11}},
+        {"darkgray", {169, 169, 169}},        {"darkgreen", {0, 100, 0}},
+        {"darkgrey", {169, 169, 169}},        {"darkkhaki", {189, 183, 107}},
+        {"darkmagenta", {139, 0, 139}},       {"darkolivegreen", {85, 107, 47}},
+        {"darkorange", {255, 140, 0}},        {"darkorchid", {153, 50, 204}},
+        {"darkred", {139, 0, 0}},             {"darksalmon", {233, 150, 122}},
+        {"darkseagreen", {143, 188, 143}},    {"darkslateblue", {72, 61, 139}},
+        {"darkslategray", {47, 79, 79}},      {"darkturquoise", {0, 206, 209}},
+        {"darkviolet", {148, 0, 211}},        {"deeppink", {255, 20, 147}},
+        {"deepskyblue", {0, 191, 255}},       {"dimgray", {105, 105, 105}},
+        {"dimgrey", {105, 105, 105}},         {"dodgerblue", {30, 144, 255}},
+        {"firebrick", {178, 34, 34}},         {"floralwhite", {255, 250, 240}},
+        {"forestgreen", {34, 139, 34}},       {"fuchsia", {255, 0, 255}},
+        {"gainsboro", {220, 220, 220}},       {"ghostwhite", {248, 248, 255}},
+        {"gold", {255, 215, 0}},              {"goldenrod", {218, 165, 32}},
+        // X11 gray/grey (与 CSS 的 128,128,128 不同)
+        {"gray", {190, 190, 190}},            {"grey", {190, 190, 190}},
+        {"green", {0, 255, 0}},  // X11 green（与 CSS 的 0,128,0 不同）
+        {"greenyellow", {173, 255, 47}},      {"honeydew", {240, 255, 240}},
+        {"hotpink", {255, 105, 180}},         {"indianred", {205, 92, 92}},
+        {"indigo", {75, 0, 130}},             {"ivory", {255, 255, 240}},
+        {"khaki", {240, 230, 140}},           {"lavender", {230, 230, 250}},
+        {"lavenderblush", {255, 240, 245}},   {"lawngreen", {124, 252, 0}},
+        {"lemonchiffon", {255, 250, 205}},    {"lightblue", {173, 216, 230}},
+        {"lightcoral", {240, 128, 128}},      {"lightcyan", {224, 255, 255}},
+        {"lightgoldenrod", {238, 221, 130}},  {"lightgray", {211, 211, 211}},
+        {"lightgreen", {144, 238, 144}},      {"lightgrey", {211, 211, 211}},
+        {"lightpink", {255, 182, 193}},       {"lightsalmon", {255, 160, 122}},
+        {"lightseagreen", {32, 178, 170}},    {"lightskyblue", {135, 206, 250}},
+        {"lightslategray", {119, 136, 153}},  {"lightsteelblue", {176, 196, 222}},
+        {"lightyellow", {255, 255, 224}},     {"lime", {0, 255, 0}},
+        {"limegreen", {50, 205, 50}},         {"linen", {250, 240, 230}},
+        {"magenta", {255, 0, 255}},
+        // X11 maroon（与 CSS 的 128,0,0 不同）
+        {"maroon", {176, 48, 96}},
+        {"mediumaquamarine", {102, 205, 170}},{"mediumblue", {0, 0, 205}},
+        {"mediumorchid", {186, 85, 211}},     {"mediumpurple", {147, 112, 219}},
+        {"mediumseagreen", {60, 179, 113}},   {"mediumslateblue", {123, 104, 238}},
+        {"mediumspringgreen", {0, 250, 154}}, {"mediumturquoise", {72, 209, 204}},
+        {"mediumvioletred", {199, 21, 133}},  {"midnightblue", {25, 25, 112}},
+        {"mintcream", {245, 255, 250}},       {"mistyrose", {255, 228, 225}},
+        {"moccasin", {255, 228, 181}},        {"navajowhite", {255, 222, 173}},
+        {"navy", {0, 0, 128}},                {"navyblue", {0, 0, 128}},
+        {"oldlace", {253, 245, 230}},         {"olive", {128, 128, 0}},
+        {"olivedrab", {107, 142, 35}},        {"orange", {255, 165, 0}},
+        {"orangered", {255, 69, 0}},          {"orchid", {218, 112, 214}},
+        {"palegoldenrod", {238, 232, 170}},   {"palegreen", {152, 251, 152}},
+        {"paleturquoise", {175, 238, 238}},   {"palevioletred", {219, 112, 147}},
+        {"papayawhip", {255, 239, 213}},      {"peachpuff", {255, 218, 185}},
+        {"peru", {205, 133, 63}},             {"pink", {255, 192, 203}},
+        {"plum", {221, 160, 221}},            {"powderblue", {176, 224, 230}},
+        // X11 purple（与 CSS 的 128,0,128 不同）
+        {"purple", {160, 32, 240}},
+        {"red", {255, 0, 0}},                 {"rosybrown", {188, 143, 143}},
+        {"royalblue", {65, 105, 225}},        {"saddlebrown", {139, 69, 19}},
+        {"salmon", {250, 128, 114}},          {"sandybrown", {244, 164, 96}},
+        {"seagreen", {46, 139, 87}},          {"seashell", {255, 245, 238}},
+        {"sienna", {160, 82, 45}},            {"silver", {192, 192, 192}},
+        {"skyblue", {135, 206, 235}},         {"slateblue", {106, 90, 205}},
+        {"slategray", {112, 128, 144}},       {"slategrey", {112, 128, 144}},
+        {"snow", {255, 250, 250}},            {"springgreen", {0, 255, 127}},
+        {"steelblue", {70, 130, 180}},        {"tan", {210, 180, 140}},
+        {"teal", {0, 128, 128}},              {"thistle", {216, 191, 216}},
+        {"tomato", {255, 99, 71}},            {"transparent", {255, 255, 255}},
+        {"turquoise", {64, 224, 208}},        {"violet", {238, 130, 238}},
+        {"violetred", {208, 32, 144}},        {"wheat", {245, 222, 179}},
+        {"white", {255, 255, 255}},           {"whitesmoke", {245, 245, 245}},
+        {"yellow", {255, 255, 0}},            {"yellowgreen", {154, 205, 50}},
+    };
+    return table;
+}
+
+namespace detail {
+
+inline std::string trim(const std::string &s) {
+    std::size_t b = s.find_first_not_of(" \t\r\n");
+    if (b == std::string::npos)
+        return {};
+    std::size_t e = s.find_last_not_of(" \t\r\n");
+    return s.substr(b, e - b + 1);
+}
+
+inline std::string toLower(std::string s) {
+    std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) {
+        return static_cast<char>(std::tolower(c));
+    });
+    return s;
+}
+
+inline std::optional<int> hexDigit(char c) {
+    if (c >= '0' && c <= '9')
+        return c - '0';
+    if (c >= 'a' && c <= 'f')
+        return c - 'a' + 10;
+    if (c >= 'A' && c <= 'F')
+        return c - 'A' + 10;
+    return std::nullopt;
+}
+
+// HSV (每分量 0..1，Graphviz 惯例) → RGB
+inline lsp::Color hsvToColor(double h, double s, double v) {
+    h = h - std::floor(h);  // 归一化到 [0,1)
+    double i = std::floor(h * 6.0);
+    double f = h * 6.0 - i;
+    double p = v * (1.0 - s);
+    double q = v * (1.0 - f * s);
+    double t = v * (1.0 - (1.0 - f) * s);
+    double r = 0, g = 0, b = 0;
+    switch (static_cast<int>(i) % 6) {
+        case 0: r = v; g = t; b = p; break;
+        case 1: r = q; g = v; b = p; break;
+        case 2: r = p; g = v; b = t; break;
+        case 3: r = p; g = q; b = v; break;
+        case 4: r = t; g = p; b = v; break;
+        default: r = v; g = p; b = q; break;
+    }
+    lsp::Color c;
+    c.red   = r;
+    c.green = g;
+    c.blue  = b;
+    c.alpha = 1.0;
+    return c;
+}
+
+}  // namespace detail
+
+// ── 解析 DOT 颜色取值（hex / HSV / 命名色 / grayNN）──────────────────────────
+inline std::optional<lsp::Color> TryParseColor(const std::string &raw) {
+    std::string value = detail::trim(raw);
+    if (value.empty())
+        return std::nullopt;
+    // 多色列表（edge 的 "c1:c2"）或调色板渐变，范围替换语义不明确，直接跳过
+    if (value.find(':') != std::string::npos || value.find(';') != std::string::npos)
+        return std::nullopt;
+
+    // "#RRGGBB" / "#RRGGBBAA"
+    if (value.front() == '#') {
+        std::string hex = value.substr(1);
+        if (hex.size() != 6 && hex.size() != 8)
+            return std::nullopt;
+        auto byte = [&](std::size_t i) -> std::optional<double> {
+            auto hi = detail::hexDigit(hex[i]);
+            auto lo = detail::hexDigit(hex[i + 1]);
+            if (!hi || !lo)
+                return std::nullopt;
+            return (*hi * 16 + *lo) / 255.0;
+        };
+        auto r = byte(0), g = byte(2), b = byte(4);
+        if (!r || !g || !b)
+            return std::nullopt;
+        lsp::Color c;
+        c.red   = *r;
+        c.green = *g;
+        c.blue  = *b;
+        c.alpha = (hex.size() == 8) ? byte(6).value_or(1.0) : 1.0;
+        return c;
+    }
+
+    // "H,S,V" / "H S V"（每分量 0..1，Graphviz HSV 记法）
+    {
+        std::string normalized = value;
+        std::replace(normalized.begin(), normalized.end(), ',', ' ');
+        std::istringstream  iss(normalized);
+        std::vector<double> parts;
+        double              v;
+        bool                ok = true;
+        while (iss >> v) {
+            parts.push_back(v);
+        }
+        if (!iss.eof())
+            ok = false;
+        if (ok && parts.size() == 3
+            && std::all_of(parts.begin(), parts.end(), [](double d) { return d >= 0.0 && d <= 1.0; })) {
+            return detail::hsvToColor(parts[0], parts[1], parts[2]);
+        }
+    }
+
+    std::string lower = detail::toLower(value);
+
+    // grayNN / greyNN（0..100 灰度百分比）
+    if (lower.rfind("gray", 0) == 0 || lower.rfind("grey", 0) == 0) {
+        std::string suffix = lower.substr(4);
+        if (!suffix.empty()
+            && std::all_of(suffix.begin(), suffix.end(), [](unsigned char c) { return std::isdigit(c); })) {
+            int        level = std::clamp(std::stoi(suffix), 0, 100);
+            double     v     = level / 100.0;
+            lsp::Color c;
+            c.red   = v;
+            c.green = v;
+            c.blue  = v;
+            c.alpha = 1.0;
+            return c;
+        }
+    }
+
+    const auto &table = NamedColorTable();
+    if (auto it = table.find(lower); it != table.end()) {
+        lsp::Color c;
+        c.red   = it->second[0] / 255.0;
+        c.green = it->second[1] / 255.0;
+        c.blue  = it->second[2] / 255.0;
+        c.alpha = 1.0;
+        return c;
+    }
+    return std::nullopt;
+}
+
+// ── 由 lsp::Color 反向生成候选表示（用于 colorPresentation）──────────────────
+// 始终提供 "#RRGGBB"/"#RRGGBBAA" 十六进制表示；若与已知命名色完全一致，则额外
+// 提供该颜色名作为候选（编辑器颜色选择器里通常会展示为下拉列表）。
+inline std::vector<lsp::ColorPresentation> ColorPresentations(const lsp::Color &color, bool quoted) {
+    auto clamp255 = [](double v) {
+        return std::clamp(static_cast<int>(std::lround(v * 255.0)), 0, 255);
+    };
+    int r = clamp255(color.red), g = clamp255(color.green), b = clamp255(color.blue);
+    int a = clamp255(color.alpha);
+
+    char buf[16];
+    if (a >= 255)
+        std::snprintf(buf, sizeof(buf), "#%02x%02x%02x", r, g, b);
+    else
+        std::snprintf(buf, sizeof(buf), "#%02x%02x%02x%02x", r, g, b, a);
+    std::string hex = buf;
+
+    auto wrap = [&](const std::string &s) {
+        return quoted ? ("\"" + s + "\"") : s;
+    };
+
+    std::vector<lsp::ColorPresentation> result;
+    lsp::ColorPresentation              hexPresentation;
+    hexPresentation.label = wrap(hex);
+    result.push_back(std::move(hexPresentation));
+
+    // 精确匹配到命名颜色时，附加该名字作为候选（不影响 hex 始终可用）
+    if (a >= 255) {
+        for (const auto &[name, rgb] : NamedColorTable()) {
+            if (rgb[0] == r && rgb[1] == g && rgb[2] == b) {
+                lsp::ColorPresentation namedPresentation;
+                namedPresentation.label = wrap(name);
+                result.push_back(std::move(namedPresentation));
+                break;
+            }
+        }
+    }
+    return result;
 }
 
 }  // namespace domain::service::catalog

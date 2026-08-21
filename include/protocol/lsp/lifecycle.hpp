@@ -248,6 +248,9 @@ struct ServerCapabilities : public Protocol {
         if (linkedEditingRangeProvider)
             json["linkedEditingRangeProvider"] = true;
 
+        if (colorProvider)
+            json["colorProvider"] = true;
+
         return json;
     }
 

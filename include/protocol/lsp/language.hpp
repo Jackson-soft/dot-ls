@@ -546,6 +546,77 @@ struct DocumentLinkParams : public Protocol {
     TextDocumentIdentifier textDocument;
 };
 
+// ── DocumentColor / ColorPresentation ─────────────────────────────────────────
+
+struct Color : public Protocol {
+    void Decode(const nlohmann::json &input) override {
+        if (input.contains("red"))
+            red = input["red"].template get<double>();
+        if (input.contains("green"))
+            green = input["green"].template get<double>();
+        if (input.contains("blue"))
+            blue = input["blue"].template get<double>();
+        if (input.contains("alpha"))
+            alpha = input["alpha"].template get<double>();
+    }
+
+    auto Encode() -> nlohmann::json override {
+        return nlohmann::json{{"red", red}, {"green", green}, {"blue", blue}, {"alpha", alpha}};
+    }
+
+    double red{0};
+    double green{0};
+    double blue{0};
+    double alpha{1};
+};
+
+struct ColorInformation : public Protocol {
+    auto Encode() -> nlohmann::json override {
+        return nlohmann::json{{"range", range.Encode()}, {"color", color.Encode()}};
+    }
+
+    Range range;
+    Color color;
+};
+
+struct DocumentColorParams : public Protocol {
+    void Decode(const nlohmann::json &input) override {
+        if (input.contains("textDocument"))
+            textDocument.Decode(input["textDocument"]);
+    }
+
+    TextDocumentIdentifier textDocument;
+};
+
+struct ColorPresentationParams : public Protocol {
+    void Decode(const nlohmann::json &input) override {
+        if (input.contains("textDocument"))
+            textDocument.Decode(input["textDocument"]);
+        if (input.contains("color"))
+            color.Decode(input["color"]);
+        if (input.contains("range"))
+            range.Decode(input["range"]);
+    }
+
+    TextDocumentIdentifier textDocument;
+    Color                  color;
+    Range                  range;
+};
+
+struct ColorPresentation : public Protocol {
+    auto Encode() -> nlohmann::json override {
+        nlohmann::json j;
+        j["label"] = label;
+        if (hasTextEdit)
+            j["textEdit"] = textEdit.Encode();
+        return j;
+    }
+
+    std::string label;
+    bool        hasTextEdit{false};
+    TextEdit    textEdit;
+};
+
 // ── OnTypeFormatting ──────────────────────────────────────────────────────────
 
 struct DocumentOnTypeFormattingParams : public Protocol {

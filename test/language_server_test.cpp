@@ -1,7 +1,9 @@
 #include "infra/formatter/dot_formatter.hpp"
 #include "infra/parser/tree_sitter_adapter.hpp"
+#include "domain/service/dot_attribute_catalog.hpp"
 #include "domain/service/lifecycle.hpp"
 
+#include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <string>
 
@@ -289,4 +291,93 @@ TEST_CASE("diagnostics: valid digraph has no errors", "[diag]") {
     auto                      tree  = ts.Parse(kSrc);
     auto                      diags = ts.GetErrors(tree.get(), kSrc);
     REQUIRE(diags.empty());
+}
+
+// ── Document Color 测试 ───────────────────────────────────────────────────────
+
+TEST_CASE("lifecycle: advertise colorProvider capability", "[lsp][capability]") {
+    domain::service::Lifecycle lifecycle;
+    auto                       result = lifecycle.Initialize({});
+    REQUIRE(result.capabilities.colorProvider);
+}
+
+TEST_CASE("document color: hex fillcolor attribute extracted", "[color]") {
+    const std::string         src = "digraph G { A [fillcolor=\"#ff0000\"] }";
+    infra::parser::TreeSitter ts;
+    auto                      tree    = ts.Parse(src);
+    auto                      entries = ts.GetColorAttributes(tree.get(), src);
+    REQUIRE(entries.size() == 1);
+    REQUIRE(entries[0].attrName == "fillcolor");
+    REQUIRE(entries[0].value == "#ff0000");
+    REQUIRE(entries[0].quoted);
+
+    auto color = domain::service::catalog::TryParseColor(entries[0].value);
+    REQUIRE(color.has_value());
+    REQUIRE(color->red == 1.0);
+    REQUIRE(color->green == 0.0);
+    REQUIRE(color->blue == 0.0);
+}
+
+TEST_CASE("document color: named color attribute extracted", "[color]") {
+    const std::string         src = "digraph G { A [color=lightblue] }";
+    infra::parser::TreeSitter ts;
+    auto                      tree    = ts.Parse(src);
+    auto                      entries = ts.GetColorAttributes(tree.get(), src);
+    REQUIRE(entries.size() == 1);
+    REQUIRE_FALSE(entries[0].quoted);
+
+    auto color = domain::service::catalog::TryParseColor(entries[0].value);
+    REQUIRE(color.has_value());
+    REQUIRE(color->red == Catch::Approx(173.0 / 255.0));
+    REQUIRE(color->green == Catch::Approx(216.0 / 255.0));
+    REQUIRE(color->blue == Catch::Approx(230.0 / 255.0));
+}
+
+TEST_CASE("document color: X11 green differs from CSS green", "[color]") {
+    auto color = domain::service::catalog::TryParseColor("green");
+    REQUIRE(color.has_value());
+    // Graphviz 默认使用 X11 配色方案：green = (0,255,0)，而非 CSS 的 (0,128,0)
+    REQUIRE(color->red == 0.0);
+    REQUIRE(color->green == 1.0);
+    REQUIRE(color->blue == 0.0);
+}
+
+TEST_CASE("document color: grayNN percentage parsed", "[color]") {
+    auto color = domain::service::catalog::TryParseColor("gray50");
+    REQUIRE(color.has_value());
+    REQUIRE(color->red == Catch::Approx(0.5));
+    REQUIRE(color->green == Catch::Approx(0.5));
+    REQUIRE(color->blue == Catch::Approx(0.5));
+}
+
+TEST_CASE("document color: HSV triple parsed", "[color]") {
+    auto color = domain::service::catalog::TryParseColor("0.0 1.0 1.0");
+    REQUIRE(color.has_value());
+    REQUIRE(color->red == Catch::Approx(1.0));
+    REQUIRE(color->green == Catch::Approx(0.0).margin(1e-6));
+    REQUIRE(color->blue == Catch::Approx(0.0).margin(1e-6));
+}
+
+TEST_CASE("document color: multi-color list is skipped", "[color]") {
+    auto color = domain::service::catalog::TryParseColor("red:blue");
+    REQUIRE_FALSE(color.has_value());
+}
+
+TEST_CASE("document color: presentation formats hex and preserves quoting", "[color]") {
+    lsp::Color color;
+    color.red = 1.0; color.green = 0.0; color.blue = 0.0; color.alpha = 1.0;
+    auto quoted = domain::service::catalog::ColorPresentations(color, true);
+    REQUIRE_FALSE(quoted.empty());
+    REQUIRE(quoted[0].label == "\"#ff0000\"");
+
+    auto unquoted = domain::service::catalog::ColorPresentations(color, false);
+    REQUIRE_FALSE(unquoted.empty());
+    REQUIRE(unquoted[0].label == "#ff0000");
+}
+
+TEST_CASE("document color: no colors in plain graph", "[color]") {
+    infra::parser::TreeSitter ts;
+    auto                      tree    = ts.Parse(kSrc);
+    auto                      entries = ts.GetColorAttributes(tree.get(), kSrc);
+    REQUIRE(entries.empty());
 }

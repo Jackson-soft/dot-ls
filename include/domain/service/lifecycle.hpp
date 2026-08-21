@@ -97,6 +97,9 @@ public:
         // 启用联动编辑（同名标识符同步修改）
         result.capabilities.linkedEditingRangeProvider = true;
 
+        // 启用 Document Color（color/fillcolor/bgcolor/fontcolor 等取值的颜色选择器）
+        result.capabilities.colorProvider = true;
+
         return result;
     }
 };

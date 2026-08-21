@@ -429,6 +429,34 @@ public:
             .Encode();
     }
 
+    // ── textDocument/documentColor ────────────────────────────────────────────
+    auto DocumentColor(const nlohmann::json &params) -> nlohmann::json {
+        lsp::DocumentColorParams input;
+        input.Decode(params);
+        const auto *doc = document_->Get(input.textDocument.uri);
+        if (!doc)
+            return nlohmann::json::array();
+        auto           colors = language_->DocumentColors(doc->text);
+        nlohmann::json arr    = nlohmann::json::array();
+        for (auto &c : colors)
+            arr.push_back(c.Encode());
+        return arr;
+    }
+
+    // ── textDocument/colorPresentation ────────────────────────────────────────
+    auto ColorPresentation(const nlohmann::json &params) -> nlohmann::json {
+        lsp::ColorPresentationParams input;
+        input.Decode(params);
+        const auto *doc = document_->Get(input.textDocument.uri);
+        if (!doc)
+            return nlohmann::json::array();
+        auto           presentations = language_->ColorPresentations(doc->text, input.color, input.range);
+        nlohmann::json arr           = nlohmann::json::array();
+        for (auto &p : presentations)
+            arr.push_back(p.Encode());
+        return arr;
+    }
+
 private:
     std::unique_ptr<domain::service::Lifecycle> lifecycle_{std::make_unique<domain::service::Lifecycle>()};
     std::unique_ptr<domain::service::Language>  language_{std::make_unique<domain::service::Language>()};

@@ -409,6 +409,38 @@ public:
         return result;
     }
 
+    // ── DocumentColor（color / fillcolor / bgcolor / fontcolor 等取值渲染色块）
+    auto DocumentColors(const std::string &text) -> std::vector<lsp::ColorInformation> {
+        auto                               tree    = parseCached(text);
+        auto                               entries = ts_.GetColorAttributes(tree, text);
+        std::vector<lsp::ColorInformation> result;
+        for (const auto &e : entries) {
+            auto parsed = catalog::TryParseColor(e.value);
+            if (!parsed)
+                continue;
+            lsp::ColorInformation ci;
+            ci.range = toLspRange(text, e.startLine, e.startChar, e.endLine, e.endChar);
+            ci.color = *parsed;
+            result.push_back(std::move(ci));
+        }
+        return result;
+    }
+
+    // ── ColorPresentation（颜色选择器确认后回填的文本表示）───────────────────
+    auto ColorPresentations(const std::string &text, const lsp::Color &color, const lsp::Range &range)
+        -> std::vector<lsp::ColorPresentation> {
+        // 通过范围起始位置判断该属性值原来是否带引号：range 覆盖整个属性值节点，
+        // 若原值带引号，range 对应的源码文本首字符即为 '"'。
+        auto     lines = splitLines(text);
+        uint32_t line  = static_cast<uint32_t>(range.start.line);
+        bool     quoted = false;
+        if (line < lines.size()) {
+            uint32_t byteCol = infra::common::Utf16ToUtf8Byte(lines[line], static_cast<uint32_t>(range.start.character));
+            quoted           = byteCol < lines[line].size() && lines[line][byteCol] == '"';
+        }
+        return catalog::ColorPresentations(color, quoted);
+    }
+
     // ── OnTypeFormatting（输入 } 时重排当前行缩进）───────────────────────────
     auto OnTypeFormatting(const std::string &text,
                           uint32_t           line,

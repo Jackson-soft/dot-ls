@@ -75,6 +75,14 @@ struct LinkEntry {
     std::string attrName;  // "image" 或 "URL"
 };
 
+// 颜色属性值（用于 documentColor / colorPresentation）
+struct ColorEntry {
+    uint32_t    startLine, startChar, endLine, endChar;  // 覆盖整个属性值节点（含引号，若有）
+    std::string value;                                   // 去引号、去首尾空白后的原始取值
+    std::string attrName;
+    bool        quoted{false};
+};
+
 // 图统计（用于 inlay hint / code lens）
 struct GraphStats {
     uint32_t    nodeCount{0};
@@ -517,6 +525,40 @@ public:
             auto sp = ts_node_start_point(valNode);
             auto ep = ts_node_end_point(valNode);
             result.push_back({sp.row, sp.column, ep.row, ep.column, cleaned, name});
+        });
+        return result;
+    }
+
+    // ── 提取颜色相关属性值（用于 documentColor / colorPresentation）──────────
+    [[nodiscard]] std::vector<ColorEntry> GetColorAttributes(const TSTree *tree, std::string_view source) const {
+        static const std::set<std::string_view> kColorAttrs = {
+            "color",
+            "fillcolor",
+            "bgcolor",
+            "fontcolor",
+            "pencolor",
+            "labelfontcolor",
+        };
+        std::vector<ColorEntry> result;
+        TSNode                  root = ts_tree_root_node(tree);
+        walk(root, [&](TSNode node) {
+            if (std::strcmp(ts_node_type(node), "attribute") != 0)
+                return;
+            TSNode nameNode = ts_node_child_by_field_name(node, "name", 4);
+            TSNode valNode  = ts_node_child_by_field_name(node, "value", 5);
+            if (ts_node_is_null(nameNode) || ts_node_is_null(valNode))
+                return;
+            auto name = nodeText(source, nameNode);
+            if (!kColorAttrs.contains(name))
+                return;
+            auto        raw    = nodeText(source, valNode);
+            bool        quoted = raw.size() >= 2 && raw.front() == '"' && raw.back() == '"';
+            std::string cleaned = quoted ? raw.substr(1, raw.size() - 2) : raw;
+            if (cleaned.empty())
+                return;
+            auto sp = ts_node_start_point(valNode);
+            auto ep = ts_node_end_point(valNode);
+            result.push_back({sp.row, sp.column, ep.row, ep.column, cleaned, name, quoted});
         });
         return result;
     }
