@@ -1,10 +1,4 @@
-cmake_minimum_required(VERSION 3.28)
-
-# CMP0167: use the upstream BoostConfig.cmake (as provided by Conan) instead
-# of CMake's removed FindBoost module.
-if (POLICY CMP0167)
-    cmake_policy(SET CMP0167 NEW)
-endif ()
+cmake_minimum_required(VERSION 4.0)
 
 project(dot-ls LANGUAGES C CXX)
 
@@ -66,6 +60,8 @@ endif ()
 # ── Main executable ──────────────────────────────────────────────────────────
 add_executable(${PROJECT_NAME} src/main.cpp)
 
+target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_26)
+
 target_link_libraries(${PROJECT_NAME}
         PRIVATE
         project_options
@@ -82,6 +78,8 @@ enable_testing()
 find_package(Catch2 REQUIRED)
 
 add_executable(my_test test/language_server_test.cpp)
+
+target_compile_features(my_test PRIVATE cxx_std_26)
 
 target_link_libraries(my_test
         PRIVATE

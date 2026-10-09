@@ -22,7 +22,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
+          - os: ubuntu-26.04
             platform: linux-x64
             binary: dot-ls
           - os: macos-latest
@@ -33,17 +33,9 @@ jobs:
             binary: dot-ls.exe
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           submodules: true
-
-      - name: Install GCC 14 (Linux only)
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update -q
-          sudo apt-get install -y gcc-14 g++-14
-          echo "CC=gcc-14"  >> $GITHUB_ENV
-          echo "CXX=g++-14" >> $GITHUB_ENV
 
       - name: Install Conan
         shell: bash
@@ -52,7 +44,7 @@ jobs:
           conan profile detect --force
 
       - name: Cache Conan packages
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: ~/.conan2/p
           key: conan-${{ matrix.platform }}-${{ hashFiles('conanfile.txt') }}
@@ -115,7 +107,7 @@ jobs:
           merge-multiple: true
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: |
             artifacts/dot-ls-*.tar.gz
