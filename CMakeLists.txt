@@ -60,7 +60,13 @@ endif ()
 # ── Main executable ──────────────────────────────────────────────────────────
 add_executable(${PROJECT_NAME} src/main.cpp)
 
-target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_26)
+if(MSVC)
+    # MSVC 目前通过 /std:c++latest 启用 C++26 支持
+    target_compile_options(${PROJECT_NAME} PRIVATE /std:c++latest)
+else()
+    # 非 MSVC 编译器（GCC/Clang）继续使用标准的 cxx_std_26
+    target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_26)
+endif()
 
 target_link_libraries(${PROJECT_NAME}
         PRIVATE
@@ -79,7 +85,13 @@ find_package(Catch2 REQUIRED)
 
 add_executable(my_test test/language_server_test.cpp)
 
-target_compile_features(my_test PRIVATE cxx_std_26)
+if(MSVC)
+    # MSVC 目前通过 /std:c++latest 启用 C++26 支持
+    target_compile_options(my_test PRIVATE /std:c++latest)
+else()
+    # 非 MSVC 编译器（GCC/Clang）继续使用标准的 cxx_std_26
+    target_compile_features(my_test PRIVATE cxx_std_26)
+endif()
 
 target_link_libraries(my_test
         PRIVATE
