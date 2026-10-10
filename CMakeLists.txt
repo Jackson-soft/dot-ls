@@ -13,6 +13,11 @@ find_package(spdlog REQUIRED)
 # ── DOT tree-sitter grammar (C, compiled as a small static library) ────────────
 add_library(ts_dot STATIC tree-sitter-dot/src/parser.c)
 target_include_directories(ts_dot PRIVATE tree-sitter-dot/src)
+if(MSVC)
+  # parser.c 大量使用 C99 指定初始化器（designated initializers），
+  # MSVC 的 C 编译器必须启用 /std:c11 才支持
+  target_compile_options(ts_dot PRIVATE /std:c11)
+endif()
 
 # ── Common build settings (INTERFACE library – no build artifact) ────────────
 # Shared include dirs, libraries, and platform flags used by every target.
@@ -35,7 +40,12 @@ target_link_libraries(project_options
 # Previously the project built with no warning flags at all. Enable the usual
 # baseline so obvious mistakes (unused variables, sign-compare, shadowing, …)
 # surface at compile time instead of silently shipping.
-target_compile_options(project_options INTERFACE -Wall -Wextra -Wpedantic)
+if(MSVC)
+  # MSVC 用 /W4 提供同级别的告警（等价于 -Wall -Wextra 的常用子集）
+  target_compile_options(project_options INTERFACE /W4)
+else()
+  target_compile_options(project_options INTERFACE -Wall -Wextra -Wpedantic)
+endif()
 
 # ── Sanitizers (opt-in) ───────────────────────────────────────────────────────
 # Off by default to keep normal Debug/Release builds fast; enable explicitly
@@ -43,29 +53,36 @@ target_compile_options(project_options INTERFACE -Wall -Wextra -Wpedantic)
 #   cmake --preset conan-debug -DDOT_LS_ENABLE_SANITIZERS=ON
 option(DOT_LS_ENABLE_SANITIZERS "Build with AddressSanitizer + UndefinedBehaviorSanitizer" OFF)
 if (DOT_LS_ENABLE_SANITIZERS)
+  if(MSVC)
+    # MSVC 仅支持 AddressSanitizer，不支持 UBSan
+    message(STATUS "Sanitizers enabled: address (MSVC)")
+    target_compile_options(project_options INTERFACE /fsanitize=address)
+    target_link_options(project_options INTERFACE /fsanitize=address)
+  else()
     message(STATUS "Sanitizers enabled: address,undefined")
     target_compile_options(project_options INTERFACE -fsanitize=address,undefined -fno-omit-frame-pointer)
     target_link_options(project_options INTERFACE -fsanitize=address,undefined)
+  endif()
 endif ()
 
 # ── Platform-specific flags (applied once, inherited by all targets) ─────────
 if (CMAKE_SYSTEM_NAME STREQUAL "Darwin")
-    message(STATUS "Configuring on/for macOS")
-    target_compile_options(project_options INTERFACE -fexperimental-library)
-    target_link_options(project_options INTERFACE -fexperimental-library)
+  message(STATUS "Configuring on/for macOS")
+  target_compile_options(project_options INTERFACE -fexperimental-library)
+  target_link_options(project_options INTERFACE -fexperimental-library)
 elseif (CMAKE_SYSTEM_NAME MATCHES "Windows")
-    target_compile_definitions(project_options INTERFACE _WIN32_WINNT=0x0601)
+  target_compile_definitions(project_options INTERFACE _WIN32_WINNT=0x0601)
 endif ()
 
 # ── Main executable ──────────────────────────────────────────────────────────
 add_executable(${PROJECT_NAME} src/main.cpp)
 
 if(MSVC)
-    # MSVC 目前通过 /std:c++latest 启用 C++26 支持
-    target_compile_options(${PROJECT_NAME} PRIVATE /std:c++latest)
+  # MSVC 目前通过 /std:c++latest 启用 C++26 支持
+  target_compile_options(${PROJECT_NAME} PRIVATE /std:c++latest)
 else()
-    # 非 MSVC 编译器（GCC/Clang）继续使用标准的 cxx_std_26
-    target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_26)
+  # 非 MSVC 编译器（GCC/Clang）继续使用标准的 cxx_std_26
+  target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_26)
 endif()
 
 target_link_libraries(${PROJECT_NAME}
@@ -76,7 +93,7 @@ target_link_libraries(${PROJECT_NAME}
         spdlog::spdlog)
 
 if (CMAKE_SYSTEM_NAME MATCHES "Linux")
-    target_link_options(${PROJECT_NAME} PRIVATE -flto=auto -static-libgcc -static-libstdc++ -static)
+  target_link_options(${PROJECT_NAME} PRIVATE -flto=auto -static-libgcc -static-libstdc++ -static)
 endif ()
 
 # ── Tests ────────────────────────────────────────────────────────────────────
@@ -86,11 +103,11 @@ find_package(Catch2 REQUIRED)
 add_executable(my_test test/language_server_test.cpp)
 
 if(MSVC)
-    # MSVC 目前通过 /std:c++latest 启用 C++26 支持
-    target_compile_options(my_test PRIVATE /std:c++latest)
+  # MSVC 目前通过 /std:c++latest 启用 C++26 支持
+  target_compile_options(my_test PRIVATE /std:c++latest)
 else()
-    # 非 MSVC 编译器（GCC/Clang）继续使用标准的 cxx_std_26
-    target_compile_features(my_test PRIVATE cxx_std_26)
+  # 非 MSVC 编译器（GCC/Clang）继续使用标准的 cxx_std_26
+  target_compile_features(my_test PRIVATE cxx_std_26)
 endif()
 
 target_link_libraries(my_test
@@ -100,4 +117,3 @@ target_link_libraries(my_test
         Catch2::Catch2WithMain)
 
 add_test(NAME my_test COMMAND $<TARGET_FILE:my_test> --success)
-
