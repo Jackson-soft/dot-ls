@@ -25,10 +25,10 @@ public:
 
     // ── 上下文感知代码补全 ─────────────────────────────────────────────────────
     auto Completion(const lsp::CompletionParams &param, const std::string &text) -> lsp::CompletionList {
-        auto     tree = parseCached(text);
-        uint32_t line = static_cast<uint32_t>(param.position.line);
-        uint32_t col  = toByteCol(text, line, static_cast<uint32_t>(param.position.character));
-        auto     ctx  = infra::parser::TreeSitter::DetectCompletionContext(text, line, col);
+        const auto *tree = parseCached(text);
+        uint32_t    line = static_cast<uint32_t>(param.position.line);
+        uint32_t    col  = toByteCol(text, line, static_cast<uint32_t>(param.position.character));
+        auto        ctx  = infra::parser::TreeSitter::DetectCompletionContext(text, line, col);
 
         switch (ctx.kind) {
             case infra::parser::CompletionKind::AttributeName:
@@ -45,8 +45,8 @@ public:
 
     // ── Hover ────────────────────────────────────────────────────────────────
     auto Hover(uint32_t line, uint32_t col, const std::string &text) -> lsp::Hover {
-        const uint32_t     byteCol = toByteCol(text, line, col);
-        const std::string  word    = wordAt(text, line, byteCol);
+        const uint32_t    byteCol = toByteCol(text, line, col);
+        const std::string word    = wordAt(text, line, byteCol);
         if (word.empty())
             return {};
         const auto &docs = catalog::HoverDocs();
@@ -106,7 +106,8 @@ public:
         for (const auto &id : ts_.GetIdentifiers(tree, text)) {
             if (id.name != atPos->name)
                 continue;
-            result.ranges.push_back(toLspRange(text, id.startLine, id.startChar, id.startLine, id.startChar + id.length));
+            result.ranges.push_back(
+                toLspRange(text, id.startLine, id.startChar, id.startLine, id.startChar + id.length));
         }
         return result;
     }
@@ -185,9 +186,9 @@ public:
         auto raw    = ts_.SemanticTokens(tree, text);
         auto tokens = decodeTokens(raw);
 
-        auto           startLine   = static_cast<uint32_t>(range.start.line);
-        auto           endLine     = static_cast<uint32_t>(range.end.line);
-        const uint32_t endByteCol  = toByteCol(text, endLine, static_cast<uint32_t>(range.end.character));
+        auto           startLine  = static_cast<uint32_t>(range.start.line);
+        auto           endLine    = static_cast<uint32_t>(range.end.line);
+        const uint32_t endByteCol = toByteCol(text, endLine, static_cast<uint32_t>(range.end.character));
 
         std::vector<RawTok> filtered;
         for (const auto &tok : tokens) {
@@ -210,10 +211,10 @@ public:
         // GetErrors 内部使用字节偏移填充 range，这里统一转换为 LSP 要求的 UTF-16 偏移
         for (auto &d : diags) {
             d.range = toLspRange(text,
-                                  static_cast<uint32_t>(d.range.start.line),
-                                  static_cast<uint32_t>(d.range.start.character),
-                                  static_cast<uint32_t>(d.range.end.line),
-                                  static_cast<uint32_t>(d.range.end.character));
+                                 static_cast<uint32_t>(d.range.start.line),
+                                 static_cast<uint32_t>(d.range.start.character),
+                                 static_cast<uint32_t>(d.range.end.line),
+                                 static_cast<uint32_t>(d.range.end.character));
         }
         return diags;
     }
@@ -237,7 +238,8 @@ public:
         const auto     atPos   = ts_.IdentifierAt(tree, text, line, byteCol);
         if (!atPos)
             return std::nullopt;
-        auto range = toLspRange(text, atPos->startLine, atPos->startChar, atPos->startLine, atPos->startChar + atPos->length);
+        auto range
+            = toLspRange(text, atPos->startLine, atPos->startChar, atPos->startLine, atPos->startChar + atPos->length);
         return std::make_pair(range, atPos->name);
     }
 
@@ -288,9 +290,9 @@ public:
         std::vector<lsp::SelectionRange> result;
         result.reserve(positions.size());
         for (const auto &pos : positions) {
-            const uint32_t line    = static_cast<uint32_t>(pos.line);
-            const uint32_t byteCol = toByteCol(text, line, static_cast<uint32_t>(pos.character));
-            auto           chain   = ts_.GetAncestorChain(tree, line, byteCol);
+            const uint32_t                       line    = static_cast<uint32_t>(pos.line);
+            const uint32_t                       byteCol = toByteCol(text, line, static_cast<uint32_t>(pos.character));
+            auto                                 chain   = ts_.GetAncestorChain(tree, line, byteCol);
             std::shared_ptr<lsp::SelectionRange> cur;
             for (auto it = chain.rbegin(); it != chain.rend(); ++it) {
                 auto next    = std::make_shared<lsp::SelectionRange>();
@@ -350,9 +352,9 @@ public:
             return result;
         lsp::InlayHint hint;
         hint.position = toLspPos(text, stats.headerLine, static_cast<uint32_t>(lines[stats.headerLine].size()));
-        hint.label = "  // " + std::to_string(stats.nodeCount) + " node" + (stats.nodeCount != 1 ? "s" : "") + ", "
-                   + std::to_string(stats.edgeCount) + " edge" + (stats.edgeCount != 1 ? "s" : "");
-        hint.kind        = lsp::InlayHintKind::Parameter;
+        hint.label    = "  // " + std::to_string(stats.nodeCount) + " node" + (stats.nodeCount != 1 ? "s" : "") + ", "
+                      + std::to_string(stats.edgeCount) + " edge" + (stats.edgeCount != 1 ? "s" : "");
+        hint.kind     = lsp::InlayHintKind::Parameter;
         hint.paddingLeft = true;
         result.push_back(std::move(hint));
         return result;
@@ -367,10 +369,10 @@ public:
             return result;
         auto makeRange = [&]() -> lsp::Range {
             return toLspRange(text,
-                               stats.headerLine,
-                               stats.headerChar,
-                               stats.headerLine,
-                               stats.headerChar + static_cast<uint32_t>(stats.graphType.size()));
+                              stats.headerLine,
+                              stats.headerChar,
+                              stats.headerLine,
+                              stats.headerChar + static_cast<uint32_t>(stats.graphType.size()));
         };
         {
             lsp::CodeLens lens;
@@ -460,7 +462,7 @@ public:
         edit.range.start.line      = line;
         edit.range.start.character = 0;
         edit.range.end             = toLspPos(text, line, static_cast<uint32_t>(origLines[line].size()));
-        edit.newText                = fmtLines[line];
+        edit.newText               = fmtLines[line];
         return {std::move(edit)};
     }
 
@@ -520,7 +522,8 @@ public:
         editRange.start.line      = startLine;
         editRange.start.character = 0;
         auto actualEnd            = std::min(endLine, origLines.size() > 0 ? origLines.size() - 1 : 0);
-        editRange.end = toLspPos(text, static_cast<uint32_t>(actualEnd), static_cast<uint32_t>(origLines[actualEnd].size()));
+        editRange.end
+            = toLspPos(text, static_cast<uint32_t>(actualEnd), static_cast<uint32_t>(origLines[actualEnd].size()));
         lsp::TextEdit edit;
         edit.range   = editRange;
         edit.newText = std::move(newText);
@@ -550,10 +553,10 @@ private:
     // ── SymbolEntry → lsp::DocumentSymbol（byte 偏移转换为 LSP 要求的 UTF-16）──
     static auto toDocSymbol(const infra::parser::SymbolEntry &e, const std::string &text) -> lsp::DocumentSymbol {
         lsp::DocumentSymbol sym;
-        sym.name            = e.name;
-        sym.kind            = static_cast<lsp::SymbolKind>(e.kind);
-        sym.range           = toLspRange(text, e.startLine, e.startChar, e.endLine, e.endChar);
-        sym.selectionRange  = toLspRange(text, e.selLine, e.selChar, e.selEndLine, e.selEndChar);
+        sym.name           = e.name;
+        sym.kind           = static_cast<lsp::SymbolKind>(e.kind);
+        sym.range          = toLspRange(text, e.startLine, e.startChar, e.endLine, e.endChar);
+        sym.selectionRange = toLspRange(text, e.selLine, e.selChar, e.selEndLine, e.selEndChar);
         for (const auto &child : e.children)
             sym.children.push_back(toDocSymbol(child, text));
         return sym;
@@ -588,8 +591,11 @@ private:
     }
 
     // 将内部（字节偏移）范围转换为 LSP 要求的 UTF-16 Range。
-    static lsp::Range
-    toLspRange(const std::string &text, uint32_t startLine, uint32_t startByteCol, uint32_t endLine, uint32_t endByteCol) {
+    static lsp::Range toLspRange(const std::string &text,
+                                 uint32_t           startLine,
+                                 uint32_t           startByteCol,
+                                 uint32_t           endLine,
+                                 uint32_t           endByteCol) {
         lsp::Range range;
         range.start = toLspPos(text, startLine, startByteCol);
         range.end   = toLspPos(text, endLine, endByteCol);
@@ -621,7 +627,7 @@ private:
         encoded.reserve(tokens.size() * 5);
         uint32_t prevLine = 0, prevChar = 0;
         for (const auto &tok : tokens) {
-            auto     line     = infra::common::LineTextAt(text, tok.line);
+            auto     line      = infra::common::LineTextAt(text, tok.line);
             uint32_t u16Col    = infra::common::Utf8ByteToUtf16(line, tok.col);
             uint32_t u16EndCol = infra::common::Utf8ByteToUtf16(line, tok.col + tok.len);
             uint32_t u16Len    = u16EndCol - u16Col;
@@ -633,8 +639,6 @@ private:
         }
         return encoded;
     }
-
-
 
     // ── 按行分割 ─────────────────────────────────────────────────────────────
     static auto splitLines(const std::string &text) -> std::vector<std::string> {
@@ -682,6 +686,5 @@ private:
             ++e;
         return std::string(lineView.substr(s, e - s));
     }
-
 };
 }  // namespace domain::service

@@ -23,16 +23,21 @@ public:
     // 格式化 DOT 源码。若存在语法错误则返回空字符串（保留原文不变）。
     static auto Format(std::string_view source, const FormattingOptions &opts) -> std::string {
         struct ParserDel {
-            void operator()(TSParser *p) const { ts_parser_delete(p); }
+            void operator()(TSParser *p) const {
+                ts_parser_delete(p);
+            }
         };
+
         struct TreeDel {
-            void operator()(TSTree *t) const { ts_tree_delete(t); }
+            void operator()(TSTree *t) const {
+                ts_tree_delete(t);
+            }
         };
 
         auto parser = std::unique_ptr<TSParser, ParserDel>(ts_parser_new());
         ts_parser_set_language(parser.get(), tree_sitter_dot());
-        auto tree = std::unique_ptr<TSTree, TreeDel>(ts_parser_parse_string(
-            parser.get(), nullptr, source.data(), static_cast<uint32_t>(source.size())));
+        auto tree = std::unique_ptr<TSTree, TreeDel>(
+            ts_parser_parse_string(parser.get(), nullptr, source.data(), static_cast<uint32_t>(source.size())));
         if (!tree)
             return {};
 
@@ -67,8 +72,8 @@ private:
 
     // ── attribute: name=value ─────────────────────────────────────────────────
     static auto fmtAttribute(TSNode node, std::string_view src) -> std::string {
-        TSNode nameNode  = ts_node_child_by_field_name(node, "name", 4);
-        TSNode valueNode = ts_node_child_by_field_name(node, "value", 5);
+        TSNode      nameNode  = ts_node_child_by_field_name(node, "name", 4);
+        TSNode      valueNode = ts_node_child_by_field_name(node, "value", 5);
         std::string out;
         if (!ts_node_is_null(nameNode))
             out += raw(src, nameNode);
@@ -100,8 +105,8 @@ private:
     }
 
     // ── node_stmt: node_id (attr_list)? ──────────────────────────────────────
-    static auto fmtNodeStmt(TSNode node, std::string_view src, int depth,
-                             const FormattingOptions &opts) -> std::string {
+    static auto fmtNodeStmt(TSNode node, std::string_view src, int depth, const FormattingOptions &opts)
+        -> std::string {
         std::string out = ind(depth, opts);
         uint32_t    nc  = ts_node_named_child_count(node);
         for (uint32_t i = 0; i < nc; ++i) {
@@ -118,8 +123,8 @@ private:
     }
 
     // ── attr_stmt: (graph|node|edge) attr_list ────────────────────────────────
-    static auto fmtAttrStmt(TSNode node, std::string_view src, int depth,
-                             const FormattingOptions &opts) -> std::string {
+    static auto fmtAttrStmt(TSNode node, std::string_view src, int depth, const FormattingOptions &opts)
+        -> std::string {
         std::string out   = ind(depth, opts);
         uint32_t    count = ts_node_child_count(node);
         for (uint32_t i = 0; i < count; ++i) {
@@ -135,30 +140,27 @@ private:
     }
 
     // 前向声明（互相调用）
-    static auto fmtEdgeStmt(TSNode node, std::string_view src, int depth,
-                             const FormattingOptions &opts) -> std::string;
-    static auto fmtSubgraph(TSNode node, std::string_view src, int depth,
-                             const FormattingOptions &opts, bool addIndent) -> std::string;
+    static auto fmtEdgeStmt(TSNode node, std::string_view src, int depth, const FormattingOptions &opts) -> std::string;
+    static auto fmtSubgraph(TSNode node, std::string_view src, int depth, const FormattingOptions &opts, bool addIndent)
+        -> std::string;
 
     // ── block: { stmt_list? } ─────────────────────────────────────────────────
     // tree-sitter extras（comment / preproc）可能附加在 block 层级而非 stmt_list 内，
     // 因此需要在 block 的 children 中统一处理。
-    static auto fmtBlock(TSNode node, std::string_view src, int depth,
-                         const FormattingOptions &opts) -> std::string {
-        std::string out   = "{\n";
+    static auto fmtBlock(TSNode node, std::string_view src, int depth, const FormattingOptions &opts) -> std::string {
+        std::string out        = "{\n";
         bool        hasContent = false;
-        uint32_t    count = ts_node_child_count(node);
+        uint32_t    count      = ts_node_child_count(node);
 
         for (uint32_t i = 0; i < count; ++i) {
-            TSNode      child = ts_node_child(node, i);
+            TSNode child = ts_node_child(node, i);
             if (!ts_node_is_named(child))
                 continue;  // 跳过 `{` 和 `}`
 
             const char *type = ts_node_type(child);
             if (std::strcmp(type, "stmt_list") == 0) {
                 fmtStmtList(child, src, depth + 1, opts, out, hasContent);
-            } else if (std::strcmp(type, "comment") == 0
-                       || std::strcmp(type, "preproc") == 0) {
+            } else if (std::strcmp(type, "comment") == 0 || std::strcmp(type, "preproc") == 0) {
                 // comment 附加在 block 层级（出现在 `{` 之后 stmt_list 之前/之后）
                 if (hasContent)
                     out += '\n';
@@ -175,9 +177,12 @@ private:
     }
 
     // ── stmt_list ─────────────────────────────────────────────────────────────
-    static void fmtStmtList(TSNode node, std::string_view src, int depth,
-                             const FormattingOptions &opts, std::string &out,
-                             bool &hasContent) {
+    static void fmtStmtList(TSNode                   node,
+                            std::string_view         src,
+                            int                      depth,
+                            const FormattingOptions &opts,
+                            std::string             &out,
+                            bool                    &hasContent) {
         uint32_t count = ts_node_child_count(node);
         for (uint32_t i = 0; i < count; ++i) {
             TSNode child = ts_node_child(node, i);
@@ -196,8 +201,7 @@ private:
                 stmt = ind(depth, opts) + fmtAttribute(child, src);
             else if (std::strcmp(type, "subgraph") == 0)
                 stmt = fmtSubgraph(child, src, depth, opts, true);
-            else if (std::strcmp(type, "comment") == 0
-                     || std::strcmp(type, "preproc") == 0)
+            else if (std::strcmp(type, "comment") == 0 || std::strcmp(type, "preproc") == 0)
                 stmt = ind(depth, opts) + raw(src, child);
             else
                 stmt = ind(depth, opts) + raw(src, child);  // 未知节点保留原文
@@ -212,8 +216,7 @@ private:
     }
 
     // ── source_file: strict? (graph|digraph) id? block ──────────────────────
-    static void fmtSourceFile(TSNode node, std::string_view src,
-                               const FormattingOptions &opts, std::string &out) {
+    static void fmtSourceFile(TSNode node, std::string_view src, const FormattingOptions &opts, std::string &out) {
         bool        hasStrict = false;
         std::string graphType;
         TSNode      idNode{};
@@ -255,8 +258,8 @@ private:
 // ── 互相调用的函数，在类体之后定义 ───────────────────────────────────────────────
 
 // edge_stmt: (node_id|subgraph) (edgeop (node_id|subgraph))+ (attr_list)?
-inline auto DotFormatter::fmtEdgeStmt(TSNode node, std::string_view src, int depth,
-                                       const FormattingOptions &opts) -> std::string {
+inline auto DotFormatter::fmtEdgeStmt(TSNode node, std::string_view src, int depth, const FormattingOptions &opts)
+    -> std::string {
     std::string out = ind(depth, opts);
     uint32_t    nc  = ts_node_named_child_count(node);
     for (uint32_t i = 0; i < nc; ++i) {
@@ -278,15 +281,16 @@ inline auto DotFormatter::fmtEdgeStmt(TSNode node, std::string_view src, int dep
 
 // subgraph: (subgraph id?)? block
 // addIndent=true 表示作为顶层语句输出缩进；false 表示内联于 edge_stmt 中
-inline auto DotFormatter::fmtSubgraph(TSNode node, std::string_view src, int depth,
-                                       const FormattingOptions &opts, bool addIndent) -> std::string {
+inline auto
+DotFormatter::fmtSubgraph(TSNode node, std::string_view src, int depth, const FormattingOptions &opts, bool addIndent)
+    -> std::string {
     std::string out;
     if (addIndent)
         out += ind(depth, opts);
 
-    bool   hasSub  = false;
+    bool   hasSub = false;
     TSNode idNode{};
-    bool   hasId   = false;
+    bool   hasId = false;
     TSNode blockNode{};
     bool   hasBlock = false;
 
@@ -319,4 +323,3 @@ inline auto DotFormatter::fmtSubgraph(TSNode node, std::string_view src, int dep
 }
 
 }  // namespace infra::formatter
-

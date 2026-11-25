@@ -175,8 +175,8 @@ public:
         if (!doc)
             return nullptr;
         auto           hls = language_->DocumentHighlight(static_cast<uint32_t>(input.position.line),
-                                                static_cast<uint32_t>(input.position.character),
-                                                doc->text);
+                                                          static_cast<uint32_t>(input.position.character),
+                                                          doc->text);
         nlohmann::json arr = nlohmann::json::array();
         for (auto &hl : hls)
             arr.push_back(hl.Encode());
@@ -191,9 +191,9 @@ public:
         if (!doc)
             return nullptr;
         auto           locs = language_->References(static_cast<uint32_t>(input.position.line),
-                                          static_cast<uint32_t>(input.position.character),
-                                          input.textDocument.uri,
-                                          doc->text);
+                                                    static_cast<uint32_t>(input.position.character),
+                                                    input.textDocument.uri,
+                                                    doc->text);
         nlohmann::json arr  = nlohmann::json::array();
         for (auto &loc : locs)
             arr.push_back(loc.Encode());
@@ -307,10 +307,10 @@ public:
             .insertSpaces = input.options.insertSpaces,
         };
         auto           edits = language_->OnTypeFormatting(doc->text,
-                                                 static_cast<uint32_t>(input.position.line),
-                                                 static_cast<uint32_t>(input.position.character),
-                                                 input.ch,
-                                                 opts);
+                                                           static_cast<uint32_t>(input.position.line),
+                                                           static_cast<uint32_t>(input.position.character),
+                                                           input.ch,
+                                                           opts);
         nlohmann::json arr   = nlohmann::json::array();
         for (auto &e : edits)
             arr.push_back(e.Encode());

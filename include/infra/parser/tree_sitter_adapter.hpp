@@ -551,8 +551,8 @@ public:
             auto name = nodeText(source, nameNode);
             if (!kColorAttrs.contains(name))
                 return;
-            auto        raw    = nodeText(source, valNode);
-            bool        quoted = raw.size() >= 2 && raw.front() == '"' && raw.back() == '"';
+            auto        raw     = nodeText(source, valNode);
+            bool        quoted  = raw.size() >= 2 && raw.front() == '"' && raw.back() == '"';
             std::string cleaned = quoted ? raw.substr(1, raw.size() - 2) : raw;
             if (cleaned.empty())
                 return;

@@ -23,7 +23,7 @@ public:
 
     virtual ~Session() = default;
 
-    virtual auto Read() -> boost::asio::awaitable<std::string>              = 0;
+    virtual auto Read() -> boost::asio::awaitable<std::string>                      = 0;
     virtual auto Write(const std::string &response) -> boost::asio::awaitable<void> = 0;
     virtual void Close()                                                            = 0;
 };
@@ -39,11 +39,9 @@ public:
 
     explicit IOSession(boost::asio::io_context &ioCtx)
 #ifdef _WIN32
-        : stdin_(ioCtx, ::GetStdHandle(STD_INPUT_HANDLE)),
-          stdout_(ioCtx, ::GetStdHandle(STD_OUTPUT_HANDLE))
+        : stdin_(ioCtx, ::GetStdHandle(STD_INPUT_HANDLE)), stdout_(ioCtx, ::GetStdHandle(STD_OUTPUT_HANDLE))
 #else
-        : stdin_(ioCtx, ::dup(STDIN_FILENO)),
-          stdout_(ioCtx, ::dup(STDOUT_FILENO))
+        : stdin_(ioCtx, ::dup(STDIN_FILENO)), stdout_(ioCtx, ::dup(STDOUT_FILENO))
 #endif
     {
     }
@@ -99,7 +97,7 @@ private:
         std::string        line;
 
         while (std::getline(stream, line)) {
-            if (line.substr(0, lsp::HeaderLen.size()) == lsp::HeaderLen) {
+            if (line.starts_with(lsp::HeaderLen)) {
                 std::string valueStr = line.substr(lsp::HeaderLen.size());
 
                 // 去除可能的回车符

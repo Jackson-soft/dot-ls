@@ -12,7 +12,6 @@ inline auto HomeDirectory() -> std::filesystem::path {
 #else
     homeDir = std::getenv("HOME");
 #endif
-
     if (homeDir != nullptr) {
         return {homeDir};
     }

@@ -159,7 +159,7 @@ private:
 
     // ── 辅助：发送错误响应 ────────────────────────────────────────────────────────
     void sendError(const uranus::jsonrpc::Id &id, int code, std::string_view message) {
-        const auto output = response_.construct();
+        auto *const output = response_.construct();
         output->SetId(id);
         output->SetError(makeError(code, message));
         sendResponse(output);
@@ -387,13 +387,14 @@ private:
     struct RequestGuard {
         boost::object_pool<uranus::jsonrpc::Request> &pool;
         uranus::jsonrpc::Request                     *req;
+
         ~RequestGuard() {
             pool.destroy(req);
         }
     };
 
     void dispatch(const std::string &body) {
-        const auto  request = request_.construct();
+        auto *const  request = request_.construct();
         RequestGuard guard{request_, request};
 
         if (!request->Parse(body)) {
@@ -446,7 +447,7 @@ private:
 
                 // 仅对有 id 的请求（非通知）发送响应
                 if (!isNotification) {
-                    const auto output = response_.construct();
+                    auto *const output = response_.construct();
                     output->SetId(id);
                     output->SetResult(result);
                     sendResponse(output);

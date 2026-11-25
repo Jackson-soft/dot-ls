@@ -21,7 +21,7 @@
 #define SET_BINARY_MODE() (void)0
 #endif
 
-int main(int argc, char **argv) {
+auto main(int argc, char **argv) -> int {
     boost::program_options::options_description desc("Allowed options");
     desc.add_options()("help,h", "produce a help message")("version,v", "print version string");
 
